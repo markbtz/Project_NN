@@ -1,1 +1,0 @@
-print("Ciao, progetto avviato!")

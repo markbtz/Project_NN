@@ -1,0 +1,22 @@
+name: nndl-saliency
+channels:
+  - pytorch
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - pip
+  - numpy
+  - matplotlib
+  - pandas
+  - scikit-image
+  - pyyaml
+  - tqdm
+  - pip:
+      - torch
+      - torchvision
+      # su Apple Silicon torch usa il backend "mps" automaticamente se disponibile
+      - timm            # backbone pretrained leggeri (ViT-Tiny/DeiT-Tiny per il task Advanced)
+      - kaggle          # download dataset
+      - opencv-python-headless
+      - pytest

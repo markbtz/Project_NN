@@ -1,0 +1,32 @@
+# Compilare dopo aver lanciato scripts/audit_dataset.py
+# Tutti i path sono relativi alla root del progetto o assoluti su Drive/locale.
+
+dataset_root: "data/"        # cartella in cui è stato scaricato SALICON
+images_dir: null             # es. "data/images/train"
+maps_dir: null                # es. "data/maps/train"
+fixations_dir: null           # null se non disponibili (vedi audit)
+has_fixation_coordinates: null  # true/false — compilare dopo l'audit
+
+# Colab: copiare/estrarre il dataset qui (disco locale della VM) a inizio sessione.
+# Leggere migliaia di JPEG direttamente da Drive montato è molto lento — è il vero
+# collo di bottiglia su Colab free, non il calcolo. Vedi notebooks/colab_bootstrap.ipynb.
+colab_local_cache_dir: "/content/data_local"
+
+# Split v2 — allineato ai numeri ufficiali SALICON (10K train / 5K val, la traccia
+# suggerisce di dividere la validation in tuning+test dato che il test set ufficiale
+# non ha ground truth pubblica). Seed unico per tutto il progetto, manifest salvato
+# in results/split_manifest.csv.
+seed: 42
+n_train: 10000
+n_tuning: 2500
+n_internal_test: 2500
+
+# Sottoinsieme di sviluppo: usato SOLO per debug/iterazione rapida durante
+# l'implementazione di B1/M1/M1-L (giorni 3-7). I run ufficiali per la tabella
+# finale (giorno 11) usano il training set completo sopra.
+dev_subset_n_train: 6000
+
+# Preprocessing
+input_size: [256, 192]   # [width, height] — vedi piano: risoluzione ridotta per Colab free + M1
+density_map_epsilon: 1.0e-6   # per normalizzazione P = (P + eps) / sum(P + eps), stabilizza KLD/SIM
+augmentation: "hflip_sync"    # unico augmentation ammesso: horizontal flip sincronizzato img+map

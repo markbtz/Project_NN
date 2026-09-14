@@ -1,0 +1,82 @@
+# Disegno sperimentale v2: un solo cambiamento alla volta rispetto al modello precedente.
+# Ogni esperimento dichiara ESPLICITAMENTE cosa isola, per evitare di confondere
+# l'effetto dell'architettura con l'effetto della loss (l'errore principale della v1).
+#
+# Uso previsto: scripts/train.py --experiment <nome> legge la entry corrispondente
+# qui sotto. Non aggiungere iperparametri hardcoded negli script.
+
+experiments:
+
+  B0:
+    description: "Center prior — media delle density map del training set, nessun training."
+    encoder: null
+    decoder: null
+    loss: null
+    isolates: "quanto vale il solo center bias"
+    task_slide: null
+
+  B1:
+    description: "ResNet18 pretrained + decoder singolo con upsampling."
+    encoder: "resnet18"
+    encoder_pretrained: true
+    decoder: "single_bottleneck"
+    skip_connections: false
+    loss: "mse"
+    isolates: "baseline"
+    task_slide: "Base"
+
+  M1:
+    description: "B1 + feature a più profondità (C3/C4/C5) fuse con skip connections."
+    encoder: "resnet18"
+    encoder_pretrained: true
+    decoder: "unet_skip"
+    skip_connections: true
+    loss: "mse"   # IMPORTANTE: stessa loss di B1, per isolare l'effetto architetturale
+    isolates: "effetto puro delle skip connection / multi-scala (a parita' di loss con B1)"
+    task_slide: "Intermediate"
+
+  M1-L:
+    description: "Identica architettura di M1, loss diversa."
+    encoder: "resnet18"
+    encoder_pretrained: true
+    decoder: "unet_skip"
+    skip_connections: true
+    loss: "cc_kld"   # combinazione CC-loss + KLD
+    isolates: "effetto puro del cambio di loss (a parita' di architettura con M1)"
+    task_slide: null
+
+  G:
+    description: >
+      Adaptive Center Prior. Costruito SOPRA alla configurazione vincente tra M1 e M1-L
+      (di norma M1-L, se la loss distribuzionale migliora le metriche). Un MLP piccolo
+      stima uno scalare per immagine alpha = sigmoid(MLP(GAP(feature_globali))) che pesa
+      la fusione tra l'output del modello e il center prior B0:
+        S(x) = (1 - alpha(x)) * S_modello(x) + alpha(x) * P_center
+      Ipotesi: il center bias non pesa allo stesso modo per tutte le immagini.
+    base_model: "M1-L"   # aggiornare a "M1" se M1-L non batte M1 al giorno 7
+    gate_hidden_dim: 16
+    loss: "same_as_base_model"
+    isolates: "se un prior spaziale appreso per immagine aiuta rispetto al modello base"
+    task_slide: "Originalita' (obbligatorio, non tagliabile)"
+
+  M2:
+    description: >
+      Come M1-L ma con l'encoder sostituito da un backbone Transformer leggero.
+      Backbone consigliato: timm, features_only=True, es. "swin_tiny_patch4_window7_224"
+      o "pvt_v2_b0" — restituiscono nativamente una piramide di feature map multi-scala,
+      compatibile con lo stesso decoder unet_skip usato da M1/M1-L, senza bisogno di un
+      adapter manuale per rimuovere il token CLS e fare reshape (rischio principale
+      identificato per questo task: da valutare/decidere entro il giorno 6).
+    encoder: "swin_tiny_patch4_window7_224"   # alternativa: "pvt_v2_b0"
+    encoder_source: "timm"
+    encoder_features_only: true
+    encoder_pretrained: true
+    decoder: "unet_skip"   # stesso decoder di M1/M1-L per confronto equo
+    loss: "same_as_M1-L"
+    isolates: "effetto dell'architettura dell'encoder (CNN vs Transformer) a parita' di decoder e loss"
+    task_slide: "Advanced"
+
+# Ordine di taglio in caso di ritardo (vedi piano, sezione rischi):
+# 1) MIT1003 (valutazione bonus, non e' un esperimento qui sopra)
+# 2) M2 ridotto (meno epoche, MAI eliminato del tutto: e' il task Advanced richiesto)
+# MAI tagliare B0, B1, M1, M1-L, G: sono il nucleo del disegno sperimentale controllato.

@@ -1,4 +1,12 @@
+from pathlib import Path
+import sys
+
+# Aggiunge la root del repository al path di Python
+REPO_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO_ROOT))
+
 from src.data.dataset import SaliconDataset
+
 
 dataset = SaliconDataset(
     data_dir="/content/data_local",

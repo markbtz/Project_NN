@@ -53,9 +53,7 @@ Non bisogna cambiare contemporaneamente architettura e loss nello stesso confron
 
 # Stato attuale del progetto
 
-La fase di **setup**, **data pipeline**, **preprocessing**, **fixation pipeline** e **metriche di valutazione** è stata completata e verificata.
-
-Attualmente risultano funzionanti:
+Le fasi di **setup**, **data pipeline**, **preprocessing**, **fixation pipeline**, **metriche** e **collegamento Dataset → training** sono state completate e verificate.
 
 ```text
 SETUP
@@ -75,7 +73,8 @@ Split riproducibile                ✅
 split_manifest.csv                 ✅
 SaliconDataset PyTorch             ✅
 Preprocessing RGB                  ✅
-Preprocessing density map          ✅
+density_map_raw                    ✅
+density_map_prob                   ✅
 Horizontal flip sincronizzato      ✅
 DataLoader                         ✅
 Smoke test                         ✅
@@ -95,23 +94,17 @@ sAUC                               ✅
 Unit test metriche                 ✅ 12 passed
 Sanity check NSS su SALICON        ✅
 Sanity check sAUC su SALICON       ✅
+
+TRAINING INTEGRATION
+train.py → SaliconDataset           ✅
+DummyDensityDataset rimosso         ✅
+B1 target = density_map_raw         ✅
+B0 target = density_map_prob        ✅
+Batch SALICON reale verificato      ✅
+B1 forward/backward end-to-end      ⏳
 ```
 
-Il prossimo blocco di lavoro è:
-
-```text
-B0 — Center Prior
-        ↓
-B1 — ResNet18 + decoder
-        ↓
-M1
-        ↓
-M1-L
-        ↓
-G — Adaptive Center Prior
-        ↓
-M2 — Transformer gerarchico
-```
+Il prossimo blocco di lavoro riguarda le **loss**, seguito da B0 e B1.
 
 ---
 
@@ -138,15 +131,19 @@ Project_NN/
 │
 ├── src/
 │   ├── __init__.py
+│   │
 │   ├── data/
 │   │   ├── __init__.py
 │   │   ├── dataset.py
 │   │   ├── fixations.py
 │   │   └── splits.py
+│   │
 │   ├── losses/
+│   │
 │   ├── models/
 │   │   ├── __init__.py
 │   │   └── baseline.py
+│   │
 │   └── metrics.py
 │
 ├── tests/
@@ -158,7 +155,7 @@ Project_NN/
 └── requirements-colab.txt
 ```
 
-Le parti di training e modellazione verranno completate progressivamente durante gli esperimenti B0/B1/M1/M1-L/G/M2.
+Le cartelle `src/losses/`, `src/models/` e `tests/` verranno completate progressivamente durante le fasi successive.
 
 ---
 
@@ -181,36 +178,39 @@ git pull
    ↓
 Google Colab
    ↓
-test / training / evaluation con GPU
+test / training / evaluation
 ```
 
-### VS Code
+## VS Code
 
 Utilizzato principalmente per:
 
 - sviluppo del codice;
 - modifica delle configurazioni;
 - modifica del README;
-- creazione di Dataset, modelli, loss e script.
+- implementazione di Dataset, metriche, loss, modelli e script.
 
-### GitHub Desktop
+## GitHub Desktop
 
 Utilizzato per:
 
 - controllare i file modificati;
 - creare i commit;
 - eseguire push verso GitHub;
-- ricevere eventuali aggiornamenti del repository.
+- ricevere gli aggiornamenti del repository.
 
-### Google Colab
+## Google Colab
 
 Utilizzato principalmente per:
 
-- GPU;
 - test della pipeline;
 - training;
 - evaluation;
-- gestione dei checkpoint.
+- utilizzo GPU quando necessario;
+- gestione dei checkpoint;
+- sanity check su dati reali SALICON.
+
+Le celle temporanee di Colab vengono usate solo per eseguire o verificare il codice presente nel repository. La logica permanente deve restare nei file Python del progetto.
 
 ---
 
@@ -233,8 +233,6 @@ conda activate nndl-saliency
 
 Il Mac viene utilizzato principalmente per sviluppo, debug leggero e controllo del codice.
 
----
-
 ## Google Colab
 
 Per training e test pesanti utilizzare:
@@ -242,8 +240,6 @@ Per training e test pesanti utilizzare:
 ```text
 notebooks/colab_bootstrap.ipynb
 ```
-
-Il notebook si occupa della configurazione della sessione Colab.
 
 Le dipendenze Colab sono definite in:
 
@@ -257,6 +253,8 @@ Installazione manuale:
 pip install -r requirements-colab.txt
 ```
 
+Per test di Dataset, DataLoader, metriche e smoke test non è necessaria la GPU. La GPU verrà utilizzata soprattutto durante il training dei modelli neurali.
+
 ---
 
 # Dataset SALICON
@@ -269,7 +267,7 @@ Il dataset viene scaricato tramite Kaggle utilizzando:
 scripts/download_salicon.py
 ```
 
-La struttura attesa è:
+La struttura logica attesa è:
 
 ```text
 data/
@@ -288,6 +286,12 @@ data/
     └── test/
 ```
 
+Su Colab il dataset viene utilizzato in:
+
+```text
+/content/data_local
+```
+
 ---
 
 # Audit del dataset
@@ -298,7 +302,7 @@ Lo script:
 scripts/audit_dataset.py
 ```
 
-è stato utilizzato per controllare il dataset scaricato.
+è stato utilizzato per controllare struttura e consistenza del dataset.
 
 Risultato dell'audit:
 
@@ -316,32 +320,11 @@ Immagini senza density map    : 5000
 Mappe senza immagine          : 0
 ```
 
-Le 5000 immagini prive di density map appartengono al **test ufficiale SALICON**, per il quale non viene utilizzata una ground truth pubblica nel nostro protocollo interno.
+Le 5000 immagini prive di density map appartengono al **test ufficiale SALICON**, per il quale non viene utilizzata una ground truth pubblica nel protocollo interno del progetto.
 
 L'audit ha inoltre confermato la presenza dei file di fixation `.mat`.
 
-Questo permette di considerare, oltre a:
-
-```text
-CC
-SIM
-KLD
-```
-
-anche metriche basate su fixation coordinates come:
-
-```text
-NSS
-sAUC
-```
-
-nelle fasi successive.
-
----
-
-# Eseguire nuovamente l'audit
-
-Su Colab:
+Esecuzione:
 
 ```bash
 python scripts/audit_dataset.py --data_dir /content/data_local
@@ -353,7 +336,7 @@ python scripts/audit_dataset.py --data_dir /content/data_local
 
 Per il download iniziale di SALICON è necessario un account Kaggle.
 
-Nel progetto viene utilizzato il file legacy:
+Nel progetto viene utilizzato:
 
 ```text
 kaggle.json
@@ -363,26 +346,22 @@ Procedura:
 
 1. accedere a Kaggle;
 2. aprire `Settings`;
-3. nella sezione API creare una **Legacy API Key**;
+3. creare una **Legacy API Key**;
 4. scaricare `kaggle.json`.
 
 Il file contiene credenziali private.
 
-**Non deve mai essere caricato su GitHub.**
-
-Su Colab il notebook `colab_bootstrap.ipynb` gestisce il caricamento/configurazione del file.
+**`kaggle.json` non deve mai essere caricato su GitHub.**
 
 ---
 
-# Gestione efficiente del dataset su Colab
+# Gestione del dataset su Google Colab
 
-Durante lo sviluppo è stato verificato che leggere o copiare decine di migliaia di piccoli file direttamente dal Google Drive montato è estremamente lento.
+Leggere decine di migliaia di piccoli file direttamente da Google Drive è lento.
 
-Il collo di bottiglia principale è l'I/O.
+Per questo motivo il training non deve leggere direttamente il dataset dal Drive montato.
 
-Per questo motivo il dataset non viene utilizzato direttamente dal Drive durante il training.
-
-La strategia scelta è:
+La strategia adottata è:
 
 ```text
 Google Drive
@@ -395,43 +374,17 @@ Colab VM
 /content/data_local
 ```
 
----
-
-# Archivio persistente SALICON
-
 Su Google Drive viene conservato:
 
 ```text
 /content/drive/MyDrive/nndl-saliency/salicon.tar
 ```
 
-L'archivio contiene la struttura corretta:
+A ogni nuova sessione Colab il dataset viene copiato/estratto sul disco locale della VM.
 
-```text
-images/
-├── train/
-├── val/
-└── test/
+## Technical debt noto sul layout del dataset
 
-maps/
-├── train/
-└── val/
-
-fixations/
-├── train/
-├── val/
-└── test/
-```
-
-Durante ogni nuova sessione Colab il file viene estratto in:
-
-```text
-/content/data_local
-```
-
-## Technical debt noto sul layout
-
-In alcune estrazioni è stata osservata una struttura legacy:
+In alcune estrazioni dell'archivio è stata osservata una struttura legacy:
 
 ```text
 images/images/train
@@ -439,7 +392,7 @@ images/images/val
 images/images/test
 ```
 
-mentre il layout atteso è:
+mentre il layout atteso dal Dataset è:
 
 ```text
 images/train
@@ -447,63 +400,9 @@ images/val
 images/test
 ```
 
-Nella sessione corrente la struttura è stata corretta e la pipeline funziona. La sistemazione definitiva di `salicon.tar` / della cella `6bis` è rimandata e non blocca lo sviluppo di B0.
+La correzione definitiva di `salicon.tar` / della cella `6bis` del notebook è ancora un piccolo **technical debt non bloccante**.
 
----
-
-# Prima preparazione del dataset
-
-La prima volta viene eseguito:
-
-```text
-Kaggle
-   ↓
-download SALICON
-   ↓
-/content/data_local
-   ↓
-audit dataset
-   ↓
-creazione salicon.tar
-   ↓
-Google Drive
-```
-
-Una volta creato:
-
-```text
-salicon.tar
-```
-
-non è più necessario scaricare SALICON da Kaggle ad ogni nuova sessione.
-
----
-
-# Sessioni Colab successive
-
-Ad ogni nuova sessione Colab il flusso consigliato è:
-
-```text
-1. Attivare GPU
-2. Montare Google Drive
-3. Clonare / aggiornare repository
-4. Installare requirements
-5. Eseguire sezione 6bis
-6. Eseguire smoke test
-7. Training / evaluation
-```
-
-La sezione `6bis` di:
-
-```text
-notebooks/colab_bootstrap.ipynb
-```
-
-estrae automaticamente `salicon.tar` in:
-
-```text
-/content/data_local
-```
+Nelle sessioni correnti la struttura viene corretta prima dell'esecuzione degli script.
 
 ---
 
@@ -515,7 +414,7 @@ La configurazione principale si trova in:
 configs/data.yaml
 ```
 
-Configurazione attuale:
+Configurazione di riferimento:
 
 ```yaml
 dataset_root: "data/"
@@ -543,14 +442,6 @@ density_map_epsilon: 1.0e-6
 augmentation: "hflip_sync"
 ```
 
-`dataset_root` rappresenta il percorso generico del dataset.
-
-Su Colab viene utilizzata la cache:
-
-```text
-/content/data_local
-```
-
 Non devono essere inseriti nel codice path personali del tipo:
 
 ```text
@@ -558,13 +449,13 @@ C:\Users\NomeUtente\...
 /Users/nomeutente/...
 ```
 
-I path condivisi devono passare attraverso le configurazioni del progetto.
+I path condivisi devono essere configurabili.
 
 ---
 
 # Split SALICON
 
-Lo split utilizzato dal progetto è fisso e riproducibile.
+Lo split utilizzato dal progetto è fisso e riproducibile:
 
 ```text
 Training       : 10000
@@ -587,11 +478,7 @@ con:
 seed = 42
 ```
 
----
-
-# Manifest dello split
-
-Lo split è stato generato una sola volta e salvato in:
+Lo split definitivo è salvato in:
 
 ```text
 results/split_manifest.csv
@@ -609,42 +496,14 @@ COCO_val2014_XXXXXXXXXXXX,val,tuning
 COCO_val2014_XXXXXXXXXXXX,val,internal_test
 ```
 
-Tutti i collaboratori devono utilizzare questo manifest.
+**Il manifest non deve essere rigenerato indipendentemente dai singoli collaboratori.**
 
-**Non bisogna rigenerare individualmente lo split.**
+Tutti gli esperimenti devono usare esattamente lo stesso split.
 
-Questo garantisce che:
-
-```text
-B0
-B1
-M1
-M1-L
-G
-M2
-```
-
-vengano confrontati esattamente sugli stessi campioni.
-
----
-
-# Creazione dello split
-
-Lo script utilizzato è:
+La logica di generazione è contenuta in:
 
 ```text
 src/data/splits.py
-```
-
-Il risultato verificato è:
-
-```text
-Train ufficiale: 10000
-Validation ufficiale: 5000
-
-Train: 10000
-Tuning: 2500
-Internal test: 2500
 ```
 
 ---
@@ -673,23 +532,24 @@ density map
 fixation file
 ```
 
-Ogni campione restituisce una struttura simile a:
+Ogni campione restituisce:
 
 ```python
 {
     "image": image_tensor,
-    "density_map": density_map_tensor,
+    "density_map_raw": density_map_raw,
+    "density_map_prob": density_map_prob,
     "fixation_path": "...",
     "image_id": "...",
     "split": "..."
 }
 ```
 
+Sono mantenute due rappresentazioni della stessa density map per separare chiaramente gli usi basati su intensità da quelli probabilistici.
+
 ---
 
 # Preprocessing immagini
-
-Il preprocessing viene eseguito direttamente da `SaliconDataset`.
 
 Ogni immagine viene:
 
@@ -698,14 +558,14 @@ Ogni immagine viene:
 3. convertita in tensore PyTorch;
 4. normalizzata utilizzando le statistiche ImageNet.
 
-Valori utilizzati:
+Valori:
 
 ```text
 mean = [0.485, 0.456, 0.406]
 std  = [0.229, 0.224, 0.225]
 ```
 
-La shape finale è:
+Shape finale:
 
 ```text
 [3, 192, 256]
@@ -718,22 +578,22 @@ La shape finale è:
 Ogni density map viene:
 
 1. caricata in grayscale;
-2. ridimensionata a `256 × 192`;
+2. ridimensionata a `256 × 192` tramite interpolazione bilineare;
 3. convertita in `float32`;
-4. limitata a valori `>= 0`;
-5. stabilizzata con epsilon;
-6. normalizzata affinché la somma totale sia pari a `1`.
+4. trasformata in due rappresentazioni differenti.
 
-Il valore di epsilon è:
+## `density_map_raw`
+
+I valori originali grayscale `0...255` vengono convertiti nell'intervallo:
 
 ```text
-1e-6
+[0, 1]
 ```
 
-Formalmente:
+tramite:
 
 ```text
-P = (P + ε) / Σ(P + ε)
+density_map_raw = density_map / 255
 ```
 
 La shape finale è:
@@ -742,37 +602,73 @@ La shape finale è:
 [1, 192, 256]
 ```
 
-Questo permette di interpretare la density map come distribuzione spaziale ed è importante per metriche e loss come SIM e KLD.
+Questa rappresentazione:
+
+- non è normalizzata a somma 1;
+- viene usata principalmente come target della MSE;
+- verrà quindi usata da B1 e M1.
+
+## `density_map_prob`
+
+A partire dalla raw map viene costruita una distribuzione spaziale:
+
+```text
+density_map_prob =
+(density_map_raw + ε)
+/
+Σ(density_map_raw + ε)
+```
+
+con:
+
+```text
+ε = 1e-6
+```
+
+La shape finale è:
+
+```text
+[1, 192, 256]
+```
+
+e vale:
+
+```text
+Σ density_map_prob ≈ 1
+```
+
+Questa rappresentazione viene usata per:
+
+```text
+B0
+SIM
+KLD
+operazioni probabilistiche
+```
+
+La separazione tra `raw` e `prob` evita di usare una target map normalizzata a somma 1 direttamente con MSE.
 
 ---
 
 # Data augmentation
 
-Al momento viene utilizzata esclusivamente:
+Durante il training viene utilizzato:
 
 ```text
 horizontal flip
 ```
 
-Il flip viene applicato contemporaneamente a:
+Il flip viene applicato in modo sincronizzato a:
 
 ```text
-immagine
-+
-density map
+image
+density_map_raw
+density_map_prob
 ```
 
-in modo da non distruggere la corrispondenza spaziale.
+In questo modo tutte le rappresentazioni rimangono spazialmente allineate.
 
-Non vengono utilizzati:
-
-```text
-random crop
-rotazioni casuali forti
-trasformazioni geometriche aggressive
-```
-
-perché altererebbero direttamente la distribuzione spaziale dell'attenzione che il modello deve apprendere.
+Non vengono utilizzati random crop o trasformazioni geometriche aggressive perché potrebbero alterare artificialmente la distribuzione spaziale della salienza.
 
 ---
 
@@ -800,7 +696,17 @@ timestamp
 fixations
 ```
 
-Le fixation sono memorizzate per osservatore come array `[N, 2]` con coordinate `[x, y]`.
+Le fixation sono memorizzate per osservatore come array:
+
+```text
+[N, 2]
+```
+
+con coordinate:
+
+```text
+[x, y]
+```
 
 È stato verificato su 500 file che le coordinate SALICON sono **1-based**:
 
@@ -809,7 +715,15 @@ x ∈ [1, 640]
 y ∈ [1, 480]
 ```
 
-La pipeline converte quindi le coordinate in formato Python/PyTorch 0-based e le ridimensiona da `640×480` a `256×192`.
+La pipeline converte quindi:
+
+```text
+SALICON 1-based
+      ↓
+Python/PyTorch 0-based
+      ↓
+resize 640×480 → 256×192
+```
 
 La logica permanente è implementata in:
 
@@ -832,29 +746,58 @@ Il parser è SALICON-specifico; le metriche rimangono invece il più possibile i
 
 # DataLoader
 
-La pipeline è compatibile con:
+La pipeline utilizza:
 
 ```python
 torch.utils.data.DataLoader
 ```
 
-È stato verificato un batch di:
+È stato verificato con successo un batch reale SALICON.
 
-```text
-4 immagini
-+
-4 density maps
-```
-
-Shape risultanti:
+Shape osservate:
 
 ```text
 Images:
-[4, 3, 192, 256]
+torch.Size([4, 3, 192, 256])
 
-Density maps:
-[4, 1, 192, 256]
+Raw targets:
+torch.Size([4, 1, 192, 256])
+
+Probability targets:
+torch.Size([4, 1, 192, 256])
 ```
+
+Sono state inoltre verificate le proprietà:
+
+```text
+density_map_raw:
+min >= 0
+max <= 1
+
+density_map_prob:
+somma per ogni campione ≈ 1
+```
+
+Output osservato:
+
+```text
+Raw range: 0.0 1.0
+
+Probability sums:
+tensor([1.0000, 1.0000, 1.0000, 1.0000])
+```
+
+Questo conferma che il contratto:
+
+```text
+SaliconDataset
+      ↓
+DataLoader
+      ↓
+training
+```
+
+è compatibile con dati SALICON reali.
 
 ---
 
@@ -872,24 +815,23 @@ Esecuzione:
 python scripts/smoke_test.py
 ```
 
-Lo smoke test controlla automaticamente:
+Lo smoke test controlla:
 
 - `train = 10000`;
 - `tuning = 2500`;
 - `internal_test = 2500`;
-- caricamento di campioni dai tre split;
-- shape immagini;
-- shape density map;
-- assenza di NaN;
-- assenza di Inf;
-- normalizzazione delle density map;
+- caricamento corretto dei tre split;
+- shape delle immagini;
+- shape di `density_map_raw`;
+- shape di `density_map_prob`;
+- assenza di NaN e Inf;
+- valori di `density_map_raw` nell'intervallo `[0,1]`;
+- somma di `density_map_prob ≈ 1`;
 - presenza dei fixation file;
 - corretto funzionamento del DataLoader;
-- corretto batching.
+- corretto batching delle due rappresentazioni.
 
-Il test verifica più campioni per ogni split.
-
-Il risultato attualmente ottenuto è:
+Risultato verificato:
 
 ```text
 ============================================================
@@ -897,27 +839,82 @@ SMOKE TEST PASSED
 ============================================================
 ```
 
-Questo conferma che la pipeline dati è pronta per essere utilizzata dai modelli.
-
 ---
 
-# Stato della pipeline dati
+# Integrazione con il training
+
+Lo script:
 
 ```text
-SALICON                       ✅
-Audit                         ✅
-Fixation                      ✅
-salicon.tar                   ✅
-Cache locale Colab            ✅
-Split 10k / 2.5k / 2.5k       ✅
-Manifest condiviso            ✅
-SaliconDataset                ✅
-Preprocessing RGB             ✅
-Preprocessing density map     ✅
-Horizontal flip sync          ✅
-DataLoader                    ✅
-Smoke test                    ✅
+scripts/train.py
 ```
+
+era stato inizialmente sviluppato utilizzando un `DummyDensityDataset` con tensori casuali per verificare forward, backward e checkpoint senza dipendere dalla pipeline dati reale.
+
+Ora è collegato direttamente a:
+
+```python
+SaliconDataset
+```
+
+Il dataset fittizio non viene più usato nella pipeline reale.
+
+## B1
+
+Per B1 il training loop usa:
+
+```python
+images = batch["image"]
+targets = batch["density_map_raw"]
+```
+
+perché B1 utilizza:
+
+```text
+MSE
+```
+
+La parte già presente relativa a:
+
+```text
+B1Baseline
+AdamW
+checkpoint
+best checkpoint
+resume
+```
+
+è stata mantenuta.
+
+## B0
+
+B0 non usa backpropagation.
+
+Per costruire il center prior vengono utilizzate:
+
+```python
+batch["density_map_prob"]
+```
+
+Il center prior viene calcolato come media delle density map probabilistiche del training set.
+
+## Stato dell'integrazione
+
+È stato verificato un batch SALICON reale end-to-end fino all'ingresso del training:
+
+```text
+SALICON
+   ↓
+SaliconDataset
+   ↓
+DataLoader
+   ↓
+train.py
+```
+
+Il training completo di B1 non è ancora stato eseguito.
+
+Prima del training vero verranno completate e testate le loss del progetto e verrà eseguito un mini test forward/backward end-to-end.
 
 ---
 
@@ -945,7 +942,7 @@ I test automatici sono contenuti in:
 tests/test_metrics.py
 ```
 
-Risultato attuale:
+Risultato:
 
 ```text
 12 passed
@@ -953,7 +950,7 @@ Risultato attuale:
 
 ## CC — Correlation Coefficient
 
-Misura la correlazione lineare tra prediction e target. **Più alto è meglio**.
+Misura la correlazione lineare tra prediction e target.
 
 ```text
 +1  correlazione perfetta
@@ -961,35 +958,82 @@ Misura la correlazione lineare tra prediction e target. **Più alto è meglio**.
 -1  correlazione inversa
 ```
 
+**Più alto è meglio.**
+
 ## SIM — Similarity
 
-Le mappe vengono normalizzate come distribuzioni e viene calcolata la loro sovrapposizione. **Più alto è meglio**.
+Le mappe vengono normalizzate come distribuzioni e viene calcolata la loro sovrapposizione:
 
 ```text
 SIM = Σ min(P, Q)
 ```
 
-Range ideale: `0 → 1`.
+Range:
+
+```text
+0 → nessuna sovrapposizione
+1 → distribuzioni identiche
+```
+
+**Più alto è meglio.**
 
 ## KLD — Kullback-Leibler Divergence
 
-Nel progetto viene usata esplicitamente la convenzione:
+Nel progetto viene utilizzata esplicitamente la convenzione:
 
 ```text
 KLD(target || prediction)
 ```
 
-Il valore ideale è `0`; **più basso è meglio**. La stessa convenzione deve essere mantenuta in tutti gli esperimenti.
+Il valore ideale è:
+
+```text
+0
+```
+
+**Più basso è meglio.**
+
+La stessa convenzione deve essere mantenuta in tutti gli esperimenti.
 
 ## NSS — Normalized Scanpath Saliency
 
-NSS usa le fixation reali degli osservatori. La saliency map viene standardizzata e si calcola la media dei valori standardizzati nei punti fissati. **Più alto è meglio**.
+NSS usa le fixation reali degli osservatori.
 
-È stato eseguito con successo anche un sanity check end-to-end su una vera density map SALICON e sulle relative fixation. Il valore ottenuto non rappresenta una performance di un modello, perché la ground-truth density map è stata usata temporaneamente come prediction.
+La saliency map viene standardizzata:
+
+```text
+S_norm = (S - mean(S)) / std(S)
+```
+
+e viene poi calcolata la media della saliency standardizzata nei punti fissati.
+
+Input:
+
+```text
+saliency prediction
++
+fixation della stessa immagine
+```
+
+**Più alto è meglio.**
+
+È stato eseguito con successo un sanity check end-to-end su una vera density map SALICON e sulle relative fixation.
+
+Il valore del sanity check non rappresenta la performance di un modello, perché la ground-truth density map è stata usata temporaneamente come prediction.
 
 ## sAUC — Shuffled AUC
 
-sAUC utilizza fixation positive della stessa immagine e fixation negative provenienti da altre immagini. Aiuta a ridurre il vantaggio dovuto al center bias.
+sAUC utilizza:
+
+```text
+prediction
++
+fixation positive della stessa immagine
++
+fixation negative provenienti da altre immagini
+```
+
+Range:
 
 ```text
 0.0 → separazione pessima
@@ -997,28 +1041,17 @@ sAUC utilizza fixation positive della stessa immagine e fixation negative proven
 1.0 → separazione perfetta
 ```
 
-È stato eseguito con successo un sanity check end-to-end su SALICON. Per il sanity check sono state usate fixation negative provenienti da una seconda immagine. Il protocollo definitivo di evaluation dovrà fissare in modo riproducibile il campionamento delle fixation negative da più immagini.
+**Più alto è meglio.**
 
-## Test delle metriche
+È stato eseguito con successo un sanity check end-to-end su SALICON.
 
-I test verificano, tra le altre cose:
+Per il sanity check sono state utilizzate fixation negative provenienti da una seconda immagine.
 
-```text
-Mappe identiche:
-CC  ≈ 1
-SIM ≈ 1
-KLD ≈ 0
+Il protocollo definitivo di evaluation dovrà fissare in modo riproducibile il campionamento delle fixation negative da più immagini.
 
-NSS:
-fixation su regione saliente     → valore positivo
-fixation su regione non saliente → valore negativo
-mappa costante                   → NSS = 0
+---
 
-sAUC:
-separazione perfetta             → 1
-separazione invertita            → 0
-parità completa                  → 0.5
-```
+# Test delle metriche
 
 Esecuzione:
 
@@ -1032,30 +1065,140 @@ Output verificato:
 12 passed
 ```
 
----
-
-# Prossimi passi
-
-## 1. B0 — Center Prior
-
-**B0 è il prossimo obiettivo operativo.**
-
-Non richiede una rete neurale. La predizione verrà ottenuta dalla saliency media calcolata sulle density map del training set.
+I test controllano, tra le altre cose:
 
 ```text
-density map train 1
-density map train 2
+Mappe identiche:
+CC  ≈ 1
+SIM ≈ 1
+KLD ≈ 0
+
+NSS:
+fixation su regione saliente      → valore positivo
+fixation su regione non saliente  → valore negativo
+mappa costante                    → NSS = 0
+
+sAUC:
+separazione perfetta              → 1
+separazione invertita             → 0
+parità completa                   → 0.5
+```
+
+---
+
+# Generalità del codice rispetto al dataset
+
+Non tutto il progetto è dataset-agnostic.
+
+## Componenti generici
+
+Sono progettati per essere riutilizzabili:
+
+```text
+src/metrics.py
+CC
+SIM
+KLD
+NSS
+sAUC
+```
+
+NSS e sAUC ricevono coordinate già convertite nel formato `[x, y]` e non dipendono direttamente dal formato `.mat` di SALICON.
+
+Anche la logica generale di training ed evaluation sarà mantenuta il più possibile indipendente dal dataset.
+
+## Componenti SALICON-specifici
+
+Sono invece specifici del dataset:
+
+```text
+SaliconDataset
+src/data/fixations.py
+src/data/splits.py
+scripts/audit_dataset.py
+```
+
+Un altro dataset richiederebbe un proprio loader/parser mantenendo invariata, per quanto possibile, la parte generica del progetto.
+
+---
+
+# Loss — prossimo blocco di sviluppo
+
+Il prossimo blocco riguarda le loss utilizzate durante il training.
+
+Verranno implementate in:
+
+```text
+src/losses/
+```
+
+e testate in:
+
+```text
+tests/test_losses.py
+```
+
+Le loss previste sono:
+
+```text
+MSE
+CC-loss
+KLD loss
+CC-loss + KLD
+```
+
+## Convenzione dei target
+
+```text
+MSE
+→ density_map_raw
+
+KLD
+→ density_map_prob
+```
+
+Per `CC-loss` verrà mantenuto un protocollo coerente con l'implementazione della metrica CC.
+
+La loss combinata prevista per M1-L sarà basata su:
+
+```text
+CC-loss + KLD
+```
+
+---
+
+# B0 — Center Prior
+
+Dopo la chiusura del blocco loss verrà completato B0.
+
+B0 non richiede una rete neurale né backpropagation.
+
+La predizione verrà ottenuta dalla media delle `density_map_prob` del training set:
+
+```text
+density_map_prob train 1
+density_map_prob train 2
 ...
-density map train N
+density_map_prob train N
         ↓
        media
         ↓
    CENTER PRIOR
 ```
 
-B0 serve a misurare quanto del problema possa essere spiegato esclusivamente dal **center bias** e il prior ottenuto verrà riutilizzato successivamente nel modello G.
+B0 serve a quantificare quanto del problema possa essere spiegato esclusivamente dal **center bias**.
 
-## 2. B1 — Baseline neurale
+Il prior ottenuto verrà riutilizzato successivamente nel modello:
+
+```text
+G — Adaptive Center Prior
+```
+
+---
+
+# B1 — Baseline neurale
+
+Dopo B0 verrà addestrato B1:
 
 ```text
 ResNet18 pretrained
@@ -1063,23 +1206,103 @@ ResNet18 pretrained
 decoder semplice
 +
 MSE
++
+density_map_raw
 ```
 
-## 3. M1 — Multi-scale
+B1 rappresenterà la baseline neurale principale.
 
-M1 aggiungerà feature multi-scala `C3/C4/C5` mantenendo la stessa MSE di B1.
+---
 
-## 4. M1-L — Cambio della loss
+# M1 — Multi-scale
 
-M1-L manterrà l'architettura di M1 e userà `CC-loss + KLD`.
+M1 aggiungerà feature multi-scala provenienti da:
 
-## 5. G — Adaptive Center Prior
+```text
+C3
+C4
+C5
+```
 
-G aggiungerà l'Adaptive Center Prior sopra M1-L.
+tramite skip connections.
 
-## 6. M2 — Advanced model
+La loss resterà la stessa di B1:
 
-M2 utilizzerà un encoder Transformer gerarchico leggero mantenendo il decoder il più possibile comparabile con M1/M1-L.
+```text
+MSE
+```
+
+Il confronto:
+
+```text
+B1 → M1
+```
+
+isolerà l'effetto della modifica architetturale.
+
+---
+
+# M1-L — Cambio della loss
+
+M1-L manterrà esattamente la stessa architettura di M1.
+
+Cambierà soltanto la funzione obiettivo:
+
+```text
+CC-loss + KLD
+```
+
+Il confronto:
+
+```text
+M1 → M1-L
+```
+
+misurerà l'effetto del cambio di loss.
+
+---
+
+# G — Adaptive Center Prior
+
+G rappresenta la componente originale principale del progetto.
+
+Concettualmente:
+
+```text
+S(x) =
+(1 - α(x)) * S_M1-L(x)
++
+α(x) * P_center
+```
+
+dove:
+
+```text
+P_center
+```
+
+è il prior ottenuto da B0.
+
+---
+
+# M2 — Advanced model
+
+M2 utilizzerà un encoder Transformer gerarchico leggero.
+
+Le opzioni considerate includono backbone gerarchici disponibili tramite `timm`, ad esempio:
+
+```text
+Swin
+PVT
+```
+
+con interfaccia:
+
+```python
+features_only=True
+```
+
+L'obiettivo è mantenere il decoder comparabile con M1/M1-L e modificare principalmente l'encoder.
 
 ---
 
@@ -1094,6 +1317,16 @@ stesso internal test
 stesse metriche
 stessa convenzione KLD
 stesso protocollo per NSS/sAUC
+```
+
+Le metriche implementate sono:
+
+```text
+CC
+SIM
+KLD
+NSS
+sAUC
 ```
 
 Il protocollo definitivo di sAUC dovrà specificare in modo riproducibile la selezione delle fixation negative.
@@ -1119,29 +1352,27 @@ Il bootstrap verrà effettuato sulle predizioni già ottenute e non richiederà 
 
 # Collaborazione
 
-Tutti i collaboratori devono lavorare sullo stesso repository.
-
 Prima di iniziare una sessione di sviluppo:
 
 ```text
 Pull / git pull
 ```
 
-poi:
+Workflow:
 
 ```text
+aggiornamento repository
+        ↓
 sviluppo
-↓
+        ↓
 test
-↓
+        ↓
 commit
-↓
+        ↓
 push
 ```
 
-È consigliato evitare di modificare contemporaneamente gli stessi file.
-
-Con l'aumentare del codice verranno utilizzati branch separati per feature differenti.
+È importante evitare di modificare contemporaneamente gli stessi file quando possibile.
 
 ---
 
@@ -1155,17 +1386,11 @@ Lo split ufficiale è:
 results/split_manifest.csv
 ```
 
-Non deve essere rigenerato dai singoli collaboratori.
-
----
+Non deve essere rigenerato individualmente.
 
 ## Dataset
 
-Il dataset non deve essere caricato su GitHub.
-
-Ogni collaboratore prepara il proprio ambiente utilizzando gli script e il notebook disponibili.
-
----
+Il dataset SALICON non deve essere caricato su GitHub.
 
 ## Configurazioni
 
@@ -1175,20 +1400,11 @@ Le configurazioni condivise devono stare in:
 configs/
 ```
 
-Gli script non devono contenere iperparametri importanti hardcoded quando questi possono essere definiti in configurazione.
-
----
+Gli iperparametri importanti dovrebbero essere definiti in configurazione invece di essere hardcoded negli script quando possibile.
 
 ## Path
 
-Non utilizzare path personali come:
-
-```text
-C:\Users\nome\...
-/Users/nome/...
-```
-
-I path condivisi devono essere configurabili.
+Non utilizzare path personali nel codice condiviso.
 
 Il path:
 
@@ -1196,7 +1412,7 @@ Il path:
 /content/data_local
 ```
 
-è specifico della VM Colab ed è definito come cache Colab nel file di configurazione.
+è specifico della VM Colab.
 
 ---
 
@@ -1206,7 +1422,7 @@ Non committare:
 
 ```text
 dataset SALICON
-*.jpg
+*.jpg del dataset
 *.png del dataset
 *.mat del dataset
 salicon.tar
@@ -1231,7 +1447,7 @@ contiene credenziali Kaggle private.
 
 # Checkpoint
 
-I checkpoint dei modelli verranno salvati su:
+I checkpoint dei modelli vengono salvati su:
 
 ```text
 Google Drive
@@ -1240,6 +1456,16 @@ Google Drive
 e non nel repository.
 
 Questo permette di mantenere i training persistenti anche quando una sessione Colab termina.
+
+`train.py` mantiene la logica di:
+
+```text
+last checkpoint
+best checkpoint
+resume
+```
+
+già presente nella baseline iniziale.
 
 ---
 
@@ -1254,8 +1480,8 @@ manifest condiviso
 configurazioni versionate
 preprocessing condiviso
 metriche comuni
+protocollo di evaluation condiviso
 checkpoint
-stesso protocollo di evaluation
 ```
 
 Seed corrente:
@@ -1274,23 +1500,17 @@ Seed corrente:
 git pull
 ```
 
----
-
 ## Installare dipendenze
 
 ```bash
 pip install -r requirements-colab.txt
 ```
 
----
-
 ## Audit dataset
 
 ```bash
 python scripts/audit_dataset.py --data_dir /content/data_local
 ```
-
----
 
 ## Smoke test
 
@@ -1304,28 +1524,63 @@ Output corretto:
 SMOKE TEST PASSED
 ```
 
----
+## Test metriche
 
-# Entry point futuri
+```bash
+pytest -q tests/test_metrics.py
+```
 
-Nelle prossime fasi verranno aggiunti almeno:
+Output attuale:
 
 ```text
+12 passed
+```
+
+## Training B1
+
+Quando verrà avviato il training reale:
+
+```bash
+python scripts/train.py     --experiment B1     --epochs 3     --batch_size 8     --checkpoint_dir /content/drive/MyDrive/nndl-saliency/checkpoints
+```
+
+## Calcolo B0
+
+```bash
+python scripts/train.py     --experiment B0     --checkpoint_dir /content/drive/MyDrive/nndl-saliency/checkpoints
+```
+
+Questi comandi sono già collegati a `SaliconDataset`; B0/B1 non sono ancora considerati esperimenti completati.
+
+---
+
+# Entry point
+
+Attualmente sono disponibili:
+
+```text
+scripts/audit_dataset.py
+scripts/smoke_test.py
 scripts/train.py
+```
+
+`train.py` è collegato al dataset reale SALICON e contiene il supporto iniziale per B0/B1.
+
+Nelle fasi successive verrà aggiunto/completato:
+
+```text
 scripts/evaluate.py
 ```
 
-L'obiettivo finale è poter utilizzare il progetto principalmente con tre operazioni:
+Non è necessario concentrare tutta la logica in un singolo `main.py`.
+
+L'obiettivo finale è avere entry point distinti e chiari per:
 
 ```text
 smoke test
 training
 evaluation
 ```
-
-Non è necessario concentrare tutta la logica in un unico `main.py`.
-
-Un eventuale `main.py` generale o una CLI potranno essere aggiunti alla fine, quando dataset, modelli, training ed evaluation saranno già stabili.
 
 ---
 
@@ -1343,10 +1598,11 @@ FASE 1 — SETUP
 FASE 2 — DATA PIPELINE
 ✅ SALICON
 ✅ Audit
-✅ Fixation files
 ✅ Split
 ✅ Manifest
-✅ Dataset PyTorch
+✅ SaliconDataset
+✅ density_map_raw
+✅ density_map_prob
 ✅ Preprocessing
 ✅ Data augmentation
 ✅ DataLoader
@@ -1370,25 +1626,40 @@ FASE 4 — METRICHE
 ✅ NSS sanity check
 ✅ sAUC sanity check
 
-FASE 5 — BASELINE
+FASE 5 — TRAINING INTEGRATION
+✅ DummyDensityDataset sostituito
+✅ train.py collegato a SaliconDataset
+✅ B1 → density_map_raw
+✅ B0 → density_map_prob
+✅ batch SALICON reale verificato
+⏳ forward/backward B1 end-to-end
+
+FASE 6 — LOSS
+⏳ MSE
+⏳ CC-loss
+⏳ KLD loss
+⏳ CC + KLD
+⏳ test loss
+
+FASE 7 — BASELINE
 ⏳ B0 Center Prior
 ⏳ B1 ResNet18 + decoder
 
-FASE 6 — MODELLI
+FASE 8 — MODELLI
 ⏳ M1
 ⏳ M1-L
 ⏳ G
 ⏳ M2
 
-FASE 7 — TRAINING / EVALUATION
-⏳ Training loop definitivo
-⏳ Checkpoint/resume
+FASE 9 — TRAINING / EVALUATION
+⏳ Training completo
+⏳ Checkpoint/resume verificato
 ⏳ Evaluation completa
 ⏳ Protocollo sAUC definitivo
 ⏳ Bootstrap CI
 ⏳ Figure qualitative
 
-FASE 8 — CONSEGNA
+FASE 10 — CONSEGNA
 ⏳ Riproducibilità da clone pulito
 ⏳ Report finale
 ```
@@ -1397,26 +1668,25 @@ FASE 8 — CONSEGNA
 
 # Prossimo obiettivo operativo
 
-Il prossimo esperimento da implementare è:
+Il prossimo blocco da implementare è:
+
+```text
+LOSS
+├── MSE
+├── CC-loss
+├── KLD loss
+└── CC-loss + KLD
+```
+
+con relativi unit test.
+
+Subito dopo:
 
 ```text
 B0 — Center Prior
 ```
 
-Obiettivo:
-
-```text
-density map del training set
-        ↓
-media spaziale
-        ↓
-center prior normalizzato
-        ↓
-evaluation con
-CC / SIM / KLD / NSS / sAUC
-```
-
-Dopo B0 si procederà con:
+e successivamente:
 
 ```text
 B1 — ResNet18 + decoder + MSE

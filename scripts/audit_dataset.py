@@ -35,29 +35,43 @@ FIXATION_HINTS = {"fixation", "fixations", "fix"}
 
 def classify_files(data_dir):
     buckets = defaultdict(list)
+
     for root, _, files in os.walk(data_dir):
-        root_lower = root.lower()
+        root_path = Path(root)
+
+        # Usa solo il percorso relativo al dataset.
+        # Evita che nomi esterni come "nndl-saliency"
+        # facciano classificare tutte le immagini come mappe.
+        relative_root = root_path.relative_to(data_dir)
+        relative_root_lower = str(relative_root).lower()
+
         for f in files:
-            path = Path(root) / f
+            path = root_path / f
             ext = path.suffix.lower()
             name_lower = f.lower()
 
             if ext in IMAGE_EXT:
-                if any(h in root_lower or h in name_lower for h in MAP_HINTS):
+                if any(
+                    h in relative_root_lower or h in name_lower
+                    for h in MAP_HINTS
+                ):
                     buckets["density_maps"].append(path)
                 else:
                     buckets["images"].append(path)
+
             elif ext in FIXATION_EXT and (
-                any(h in root_lower for h in FIXATION_HINTS)
+                any(h in relative_root_lower for h in FIXATION_HINTS)
                 or any(h in name_lower for h in FIXATION_HINTS)
             ):
                 buckets["fixation_files"].append(path)
+
             elif ext in FIXATION_EXT:
                 buckets["other_structured_files"].append(path)
+
             else:
                 buckets["other_files"].append(path)
-    return buckets
 
+    return buckets
 
 def stem_id(path: Path) -> str:
     """Estrae un ID confrontabile dal nome file, rimuovendo suffissi comuni."""

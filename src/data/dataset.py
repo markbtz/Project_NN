@@ -4,6 +4,12 @@ import random
 
 import numpy as np
 import torch
+from pathlib import Path
+import csv
+import random
+
+import numpy as np
+import torch
 from PIL import Image
 from torch.utils.data import Dataset
 from torchvision.transforms import functional as TF
@@ -150,6 +156,19 @@ class SaliconDataset(Dataset):
         return image
 
     def _load_density_map(self, path):
+        """
+        Restituisce due versioni della stessa density map:
+
+        density_map_raw:
+            valori in [0, 1]
+            usata principalmente con MSE
+
+        density_map_prob:
+            valori >= 0
+            somma totale = 1
+            usata per B0, SIM e KLD
+        """
+
         density_map = Image.open(path).convert("L")
 
         density_map = density_map.resize(
@@ -162,21 +181,45 @@ class SaliconDataset(Dataset):
             dtype=np.float32,
         )
 
-        density_map = np.clip(
-            density_map,
+        # -------------------------------------------------
+        # RAW MAP
+        #
+        # PIL grayscale produce valori 0...255.
+        # Li portiamo nell'intervallo [0,1].
+        # -------------------------------------------------
+
+        density_map_raw = density_map / 255.0
+
+        density_map_raw = np.clip(
+            density_map_raw,
             a_min=0.0,
-            a_max=None,
+            a_max=1.0,
         )
 
-        density_map = density_map + self.eps
-
-        density_map /= density_map.sum()
-
-        density_map = torch.from_numpy(
-            density_map
+        density_map_raw = torch.from_numpy(
+            density_map_raw
         ).unsqueeze(0)
 
-        return density_map
+        # -------------------------------------------------
+        # PROBABILITY MAP
+        #
+        # Partiamo dalla raw map e la normalizziamo
+        # affinché la somma dei pixel sia 1.
+        # -------------------------------------------------
+
+        density_map_prob = (
+            density_map_raw + self.eps
+        )
+
+        density_map_prob = (
+            density_map_prob
+            / density_map_prob.sum()
+        )
+
+        return (
+            density_map_raw,
+            density_map_prob,
+        )
 
     def __len__(self):
         return len(self.samples)
@@ -189,19 +232,36 @@ class SaliconDataset(Dataset):
         )
 
         image = self._load_image(image_path)
-        density_map = self._load_density_map(map_path)
 
-        # Flip sincronizzato immagine + mappa.
+        (
+            density_map_raw,
+            density_map_prob,
+        ) = self._load_density_map(
+            map_path
+        )
+
+        # Flip sincronizzato:
+        # immagine + entrambe le density map.
         if self.augmentation and random.random() < 0.5:
-            image = torch.flip(image, dims=[2])
-            density_map = torch.flip(
-                density_map,
+            image = torch.flip(
+                image,
+                dims=[2],
+            )
+
+            density_map_raw = torch.flip(
+                density_map_raw,
+                dims=[2],
+            )
+
+            density_map_prob = torch.flip(
+                density_map_prob,
                 dims=[2],
             )
 
         return {
             "image": image,
-            "density_map": density_map,
+            "density_map_raw": density_map_raw,
+            "density_map_prob": density_map_prob,
             "fixation_path": str(fixation_path),
             "image_id": sample["image_id"],
             "split": sample["split"],

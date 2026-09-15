@@ -1,228 +1,262 @@
 from pathlib import Path
-import sys
+import csv
+import random
 
+import numpy as np
 import torch
-from torch.utils.data import DataLoader
+from PIL import Image
+from torch.utils.data import Dataset
+from torchvision.transforms import functional as TF
 
 
-# ---------------------------------------------------------
-# Permette di importare src anche eseguendo:
-# python scripts/smoke_test.py
-# ---------------------------------------------------------
-
-REPO_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(REPO_ROOT))
-
-from src.data.dataset import SaliconDataset
+IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png"]
+MAP_EXTENSIONS = [".png", ".jpg", ".jpeg"]
+FIXATION_EXTENSIONS = [".mat"]
 
 
-# ---------------------------------------------------------
-# Configurazione
-# ---------------------------------------------------------
+class SaliconDataset(Dataset):
+    def __init__(
+        self,
+        data_dir,
+        manifest_path,
+        split,
+        input_size=(256, 192),
+        density_map_epsilon=1e-6,
+        augmentation=False,
+    ):
+        self.data_dir = Path(data_dir)
+        self.manifest_path = Path(manifest_path)
+        self.split = split
 
-DATA_DIR = "/content/data_local"
-MANIFEST_PATH = REPO_ROOT / "results" / "split_manifest.csv"
+        # input_size è [width, height]
+        self.input_size = tuple(input_size)
 
-EXPECTED_SPLITS = {
-    "train": 10000,
-    "tuning": 2500,
-    "internal_test": 2500,
-}
+        self.eps = float(density_map_epsilon)
+        self.augmentation = augmentation
 
-EXPECTED_IMAGE_SHAPE = (3, 192, 256)
-EXPECTED_MAP_SHAPE = (1, 192, 256)
+        self.samples = self._load_manifest()
 
-
-# ---------------------------------------------------------
-# Controllo singolo campione
-# ---------------------------------------------------------
-
-def check_sample(dataset, index, split_name):
-    sample = dataset[index]
-
-    image = sample["image"]
-    density_map = sample["density_map"]
-    fixation_path = Path(sample["fixation_path"])
-
-    assert image.shape == EXPECTED_IMAGE_SHAPE, (
-        f"{split_name}: image shape errata: {image.shape}"
-    )
-
-    assert density_map.shape == EXPECTED_MAP_SHAPE, (
-        f"{split_name}: density map shape errata: {density_map.shape}"
-    )
-
-    assert torch.isfinite(image).all(), (
-        f"{split_name}: trovati NaN/Inf nell'immagine"
-    )
-
-    assert torch.isfinite(density_map).all(), (
-        f"{split_name}: trovati NaN/Inf nella density map"
-    )
-
-    density_sum = density_map.sum().item()
-
-    assert abs(density_sum - 1.0) < 1e-4, (
-        f"{split_name}: density map non normalizzata "
-        f"(somma={density_sum})"
-    )
-
-    assert fixation_path.exists(), (
-        f"{split_name}: fixation file non trovato: "
-        f"{fixation_path}"
-    )
-
-    print(
-        f"  [OK] {split_name} | "
-        f"{sample['image_id']} | "
-        f"map sum={density_sum:.6f}"
-    )
-
-
-# ---------------------------------------------------------
-# Main smoke test
-# ---------------------------------------------------------
-
-def main():
-    print("=" * 60)
-    print("SALICON DATA PIPELINE - SMOKE TEST")
-    print("=" * 60)
-
-    data_dir = Path(DATA_DIR)
-
-    assert data_dir.exists(), (
-        f"Dataset non trovato: {DATA_DIR}\n"
-        "Esegui prima la sezione 6bis del notebook Colab."
-    )
-
-    assert MANIFEST_PATH.exists(), (
-        f"Manifest non trovato: {MANIFEST_PATH}"
-    )
-
-    datasets = {}
-
-    # -----------------------------------------------------
-    # 1. Controllo dimensione split
-    # -----------------------------------------------------
-
-    print("\n[1/3] Controllo split")
-
-    for split_name, expected_size in EXPECTED_SPLITS.items():
-
-        dataset = SaliconDataset(
-            data_dir=DATA_DIR,
-            manifest_path=MANIFEST_PATH,
-            split=split_name,
-            input_size=(256, 192),
-            density_map_epsilon=1e-6,
-            augmentation=False,
-        )
-
-        actual_size = len(dataset)
-
-        assert actual_size == expected_size, (
-            f"{split_name}: attesi {expected_size} campioni, "
-            f"trovati {actual_size}"
-        )
-
-        datasets[split_name] = dataset
-
-        print(
-            f"  [OK] {split_name}: "
-            f"{actual_size} campioni"
-        )
-
-    # -----------------------------------------------------
-    # 2. Controllo campioni
-    # -----------------------------------------------------
-
-    print("\n[2/3] Controllo campioni")
-
-    for split_name, dataset in datasets.items():
-
-        # Controlliamo inizio, centro e fine dello split
-        indices = [
-            0,
-            len(dataset) // 2,
-            len(dataset) - 1,
-        ]
-
-        for index in indices:
-            check_sample(
-                dataset,
-                index,
-                split_name,
+        if len(self.samples) == 0:
+            raise ValueError(
+                f"Nessun campione trovato per split='{split}' "
+                f"nel manifest {manifest_path}"
             )
 
-    # -----------------------------------------------------
-    # 3. Controllo DataLoader
-    # -----------------------------------------------------
+        print(
+            f"SaliconDataset split='{split}': "
+            f"{len(self.samples)} campioni"
+        )
 
-    print("\n[3/3] Controllo DataLoader")
+    def _load_manifest(self):
+        samples = []
 
-    train_loader = DataLoader(
-        datasets["train"],
-        batch_size=4,
-        shuffle=False,
-        num_workers=0,
-    )
+        with self.manifest_path.open(
+            "r",
+            encoding="utf-8",
+            newline=""
+        ) as f:
+            reader = csv.DictReader(f)
 
-    batch = next(iter(train_loader))
+            required_columns = {
+                "image_id",
+                "official_split",
+                "split",
+            }
 
-    images = batch["image"]
-    density_maps = batch["density_map"]
+            if not required_columns.issubset(reader.fieldnames):
+                raise ValueError(
+                    f"Manifest non valido. "
+                    f"Colonne trovate: {reader.fieldnames}"
+                )
 
-    assert images.shape == (4, 3, 192, 256), (
-        f"Batch immagini con shape errata: {images.shape}"
-    )
+            for row in reader:
+                if row["split"] == self.split:
+                    samples.append(row)
 
-    assert density_maps.shape == (4, 1, 192, 256), (
-        f"Batch density maps con shape errata: "
-        f"{density_maps.shape}"
-    )
+        return samples
 
-    assert torch.isfinite(images).all(), (
-        "NaN/Inf nel batch immagini"
-    )
+    @staticmethod
+    def _find_file(directory, image_id, extensions):
+        directory = Path(directory)
 
-    assert torch.isfinite(density_maps).all(), (
-        "NaN/Inf nel batch density maps"
-    )
+        for ext in extensions:
+            candidate = directory / f"{image_id}{ext}"
 
-    map_sums = density_maps.sum(dim=(1, 2, 3))
+            if candidate.exists():
+                return candidate
 
-    assert torch.allclose(
-        map_sums,
-        torch.ones_like(map_sums),
-        atol=1e-4,
-    ), (
-        f"Density maps del batch non normalizzate: "
-        f"{map_sums}"
-    )
+        raise FileNotFoundError(
+            f"File non trovato per ID '{image_id}' in {directory}"
+        )
 
-    print(
-        "  [OK] Batch immagini:",
-        tuple(images.shape),
-    )
+    def _paths_for_sample(self, sample):
+        image_id = sample["image_id"]
+        official_split = sample["official_split"]
 
-    print(
-        "  [OK] Batch density maps:",
-        tuple(density_maps.shape),
-    )
+        image_dir = (
+            self.data_dir
+            / "images"
+            / official_split
+        )
 
-    print(
-        "  [OK] Somme density maps:",
-        map_sums.tolist(),
-    )
+        map_dir = (
+            self.data_dir
+            / "maps"
+            / official_split
+        )
 
-    # -----------------------------------------------------
-    # Fine
-    # -----------------------------------------------------
+        fixation_dir = (
+            self.data_dir
+            / "fixations"
+            / official_split
+        )
 
-    print("\n" + "=" * 60)
-    print("SMOKE TEST PASSED")
-    print("=" * 60)
+        image_path = self._find_file(
+            image_dir,
+            image_id,
+            IMAGE_EXTENSIONS,
+        )
 
+        map_path = self._find_file(
+            map_dir,
+            image_id,
+            MAP_EXTENSIONS,
+        )
 
-if __name__ == "__main__":
-    main()
+        fixation_path = self._find_file(
+            fixation_dir,
+            image_id,
+            FIXATION_EXTENSIONS,
+        )
+
+        return image_path, map_path, fixation_path
+
+    def _load_image(self, path):
+        image = Image.open(path).convert("RGB")
+
+        image = image.resize(
+            self.input_size,
+            Image.BILINEAR,
+        )
+
+        image = TF.to_tensor(image)
+
+        image = TF.normalize(
+            image,
+            mean=[0.485, 0.456, 0.406],
+            std=[0.229, 0.224, 0.225],
+        )
+
+        return image
+
+    def _load_density_map(self, path):
+        """
+        Restituisce due versioni della stessa density map:
+
+        density_map_raw:
+            valori in [0, 1]
+            usata principalmente con MSE
+
+        density_map_prob:
+            valori >= 0
+            somma totale = 1
+            usata per B0, SIM e KLD
+        """
+
+        density_map = Image.open(path).convert("L")
+
+        density_map = density_map.resize(
+            self.input_size,
+            Image.BILINEAR,
+        )
+
+        density_map = np.asarray(
+            density_map,
+            dtype=np.float32,
+        )
+
+        # -------------------------------------------------
+        # RAW MAP
+        #
+        # PIL grayscale produce valori 0...255.
+        # Li portiamo nell'intervallo [0,1].
+        # -------------------------------------------------
+
+        density_map_raw = density_map / 255.0
+
+        density_map_raw = np.clip(
+            density_map_raw,
+            a_min=0.0,
+            a_max=1.0,
+        )
+
+        density_map_raw = torch.from_numpy(
+            density_map_raw
+        ).unsqueeze(0)
+
+        # -------------------------------------------------
+        # PROBABILITY MAP
+        #
+        # Partiamo dalla raw map e la normalizziamo
+        # affinché la somma dei pixel sia 1.
+        # -------------------------------------------------
+
+        density_map_prob = (
+            density_map_raw + self.eps
+        )
+
+        density_map_prob = (
+            density_map_prob
+            / density_map_prob.sum()
+        )
+
+        return (
+            density_map_raw,
+            density_map_prob,
+        )
+
+    def __len__(self):
+        return len(self.samples)
+
+    def __getitem__(self, index):
+        sample = self.samples[index]
+
+        image_path, map_path, fixation_path = (
+            self._paths_for_sample(sample)
+        )
+
+        image = self._load_image(image_path)
+
+        (
+            density_map_raw,
+            density_map_prob,
+        ) = self._load_density_map(
+            map_path
+        )
+
+        # Flip sincronizzato:
+        # immagine + entrambe le density map.
+        if self.augmentation and random.random() < 0.5:
+            image = torch.flip(
+                image,
+                dims=[2],
+            )
+
+            density_map_raw = torch.flip(
+                density_map_raw,
+                dims=[2],
+            )
+
+            density_map_prob = torch.flip(
+                density_map_prob,
+                dims=[2],
+            )
+
+        return {
+            "image": image,
+            "density_map_raw": density_map_raw,
+            "density_map_prob": density_map_prob,
+            "fixation_path": str(fixation_path),
+            "image_id": sample["image_id"],
+            "split": sample["split"],
+        }

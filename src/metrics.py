@@ -205,3 +205,158 @@ def kld(
     ).sum(dim=1)
 
     return score.mean()
+
+def nss(
+    prediction: torch.Tensor,
+    fixation_coordinates,
+    eps: float = 1e-8,
+) -> torch.Tensor:
+    """
+    Normalized Scanpath Saliency (NSS).
+
+    Parameters
+    ----------
+    prediction : torch.Tensor
+        Saliency map prevista.
+
+        Shape supportate:
+            [H, W]
+            [1, H, W]
+            [1, 1, H, W]
+
+    fixation_coordinates : array-like
+        Coordinate delle fixation con shape [N, 2].
+
+        Ogni coordinata è:
+            [x, y]
+
+        Le coordinate devono essere già:
+            - 0-based
+            - ridimensionate alla stessa risoluzione
+              della prediction.
+
+    eps : float
+        Valore utilizzato per stabilità numerica.
+
+    Returns
+    -------
+    torch.Tensor
+        NSS medio sulle fixation.
+
+    Note
+    ----
+    Più alto è meglio.
+
+    NSS standardizza la saliency map:
+
+        S_norm = (S - mean(S)) / std(S)
+
+    e calcola la media dei valori standardizzati
+    nelle posizioni fissate dagli osservatori.
+    """
+
+    # ---------------------------------------------
+    # Portiamo prediction alla forma [H, W]
+    # ---------------------------------------------
+
+    pred = prediction.float()
+
+    if pred.ndim == 4:
+
+        if pred.shape[0] != 1 or pred.shape[1] != 1:
+            raise ValueError(
+                "NSS accetta una singola saliency map. "
+                "Per input 4D è richiesta shape [1, 1, H, W]."
+            )
+
+        pred = pred[0, 0]
+
+    elif pred.ndim == 3:
+
+        if pred.shape[0] != 1:
+            raise ValueError(
+                "Per input 3D è richiesta shape [1, H, W]."
+            )
+
+        pred = pred[0]
+
+    elif pred.ndim != 2:
+        raise ValueError(
+            "Prediction deve avere shape "
+            "[H,W], [1,H,W] oppure [1,1,H,W]."
+        )
+
+    height, width = pred.shape
+
+    # ---------------------------------------------
+    # Coordinate fixation
+    # ---------------------------------------------
+
+    fix = torch.as_tensor(
+        fixation_coordinates,
+        dtype=torch.long,
+        device=pred.device,
+    )
+
+    if fix.ndim != 2 or fix.shape[1] != 2:
+        raise ValueError(
+            "fixation_coordinates deve avere shape [N, 2]."
+        )
+
+    if fix.shape[0] == 0:
+        raise ValueError(
+            "NSS richiede almeno una fixation."
+        )
+
+    x = fix[:, 0]
+    y = fix[:, 1]
+
+    # ---------------------------------------------
+    # Controllo coordinate
+    # ---------------------------------------------
+
+    if (
+        torch.any(x < 0)
+        or torch.any(x >= width)
+        or torch.any(y < 0)
+        or torch.any(y >= height)
+    ):
+        raise ValueError(
+            "Sono presenti fixation fuori dai limiti "
+            "della saliency map."
+        )
+
+    # ---------------------------------------------
+    # Z-score della saliency map
+    # ---------------------------------------------
+
+    mean = pred.mean()
+
+    std = pred.std(
+        unbiased=False
+    )
+
+    # Mappa costante:
+    # non contiene informazione spaziale.
+    if std < eps:
+        return torch.zeros(
+            (),
+            dtype=pred.dtype,
+            device=pred.device,
+        )
+
+    normalized = (
+        pred - mean
+    ) / (std + eps)
+
+    # ---------------------------------------------
+    # Le fixation sono [x, y],
+    # mentre PyTorch indicizza [y, x]
+    # ---------------------------------------------
+
+    fixation_values = normalized[
+        y,
+        x,
+    ]
+
+    return fixation_values.mean()

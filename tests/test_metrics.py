@@ -8,7 +8,7 @@ import torch
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
-from src.metrics import cc, sim, kld
+from src.metrics import cc, sim, kld, nss
 
 
 def test_identical_maps():
@@ -224,3 +224,90 @@ def test_wrong_shapes_raise_error():
         raise AssertionError(
             "CC avrebbe dovuto generare ValueError."
         )
+
+def test_nss_high_saliency_at_fixation():
+    """
+    NSS deve essere positivo quando la fixation cade
+    nella zona con saliency più alta.
+    """
+
+    prediction = torch.tensor(
+        [
+            [0.0, 0.0, 0.0],
+            [0.0, 10.0, 0.0],
+            [0.0, 0.0, 0.0],
+        ],
+        dtype=torch.float32,
+    )
+
+    # x=1, y=1 -> centro della mappa
+    fixations = [
+        [1, 1]
+    ]
+
+    score = nss(
+        prediction,
+        fixations,
+    )
+
+    assert torch.isfinite(score)
+    assert score > 0.0
+
+
+def test_nss_low_saliency_at_fixation():
+    """
+    NSS deve essere negativo quando la fixation cade
+    in una zona meno saliente rispetto alla media.
+    """
+
+    prediction = torch.tensor(
+        [
+            [0.0, 0.0, 0.0],
+            [0.0, 10.0, 0.0],
+            [0.0, 0.0, 0.0],
+        ],
+        dtype=torch.float32,
+    )
+
+    # x=0, y=0 -> zona non saliente
+    fixations = [
+        [0, 0]
+    ]
+
+    score = nss(
+        prediction,
+        fixations,
+    )
+
+    assert torch.isfinite(score)
+    assert score < 0.0
+
+
+def test_nss_constant_map():
+    """
+    Una mappa completamente costante non contiene
+    informazione spaziale e deve restituire NSS = 0.
+    """
+
+    prediction = torch.ones(
+        192,
+        256,
+        dtype=torch.float32,
+    )
+
+    fixations = [
+        [10, 10],
+        [100, 50],
+        [200, 150],
+    ]
+
+    score = nss(
+        prediction,
+        fixations,
+    )
+
+    assert torch.isclose(
+        score,
+        torch.tensor(0.0),
+        atol=1e-6,
+    )

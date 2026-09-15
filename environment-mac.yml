@@ -6,13 +6,17 @@ channels:
 dependencies:
   - python=3.10
   - pip
-  - numpy
   - matplotlib
   - pandas
   - scikit-image
   - pyyaml
   - tqdm
   - pip:
+      # numpy va qui insieme a torch/torchvision/opencv, NON tra le dipendenze
+      # conda sopra: cosi' pip risolve tutte queste versioni insieme in un solo
+      # passaggio, evitando il disallineamento numpy/torch visto in pratica
+      # (torch compilato contro un ABI numpy diverso da quello installato da conda).
+      - numpy
       - torch
       - torchvision
       # su Apple Silicon torch usa il backend "mps" automaticamente se disponibile

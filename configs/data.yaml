@@ -1,7 +1,7 @@
 # Compilare dopo aver lanciato scripts/audit_dataset.py
 # Tutti i path sono relativi alla root del progetto o assoluti su Drive/locale.
 
-dataset_root: "data/data_local"        # cartella in cui è stato scaricato SALICON
+dataset_root: "data/"        # cartella in cui è stato scaricato SALICON
 images_dir: "images"             # es. "data/images/train"
 maps_dir: "maps"                # es. "data/maps/train"
 fixations_dir: "fixations"           # null se non disponibili (vedi audit)

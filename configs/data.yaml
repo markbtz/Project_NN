@@ -1,11 +1,11 @@
 # Compilare dopo aver lanciato scripts/audit_dataset.py
 # Tutti i path sono relativi alla root del progetto o assoluti su Drive/locale.
 
-dataset_root: "data/"        # cartella in cui è stato scaricato SALICON
-images_dir: null             # es. "data/images/train"
-maps_dir: null                # es. "data/maps/train"
-fixations_dir: null           # null se non disponibili (vedi audit)
-has_fixation_coordinates: null  # true/false — compilare dopo l'audit
+dataset_root: "data/data_local"        # cartella in cui è stato scaricato SALICON
+images_dir: "images"             # es. "data/images/train"
+maps_dir: "maps"                # es. "data/maps/train"
+fixations_dir: "fixations"           # null se non disponibili (vedi audit)
+has_fixation_coordinates: true  # true/false — compilare dopo l'audit
 
 # Colab: copiare/estrarre il dataset qui (disco locale della VM) a inizio sessione.
 # Leggere migliaia di JPEG direttamente da Drive montato è molto lento — è il vero

@@ -53,52 +53,64 @@ Non bisogna cambiare contemporaneamente architettura e loss nello stesso confron
 
 # Stato attuale del progetto
 
-La parte di setup, download e preparazione della pipeline dati è stata completata.
+La fase di **setup**, **data pipeline**, **preprocessing**, **fixation pipeline** e **metriche di valutazione** è stata completata e verificata.
 
 Attualmente risultano funzionanti:
 
 ```text
-Repository GitHub              ✅
-Collaborazione GitHub          ✅
-VS Code                        ✅
-Google Colab                   ✅
-GPU NVIDIA                     ✅
-Google Drive                   ✅
-Kaggle API                     ✅
+SETUP
+Repository GitHub                  ✅
+Collaborazione GitHub              ✅
+VS Code                            ✅
+Google Colab                       ✅
+GPU NVIDIA                         ✅
+Google Drive                       ✅
+Kaggle API                         ✅
 
-Download SALICON               ✅
-Audit SALICON                  ✅
-Fixation files disponibili     ✅
+DATA PIPELINE
+Download SALICON                   ✅
+Audit SALICON                      ✅
+Fixation files disponibili         ✅
+Split riproducibile                ✅
+split_manifest.csv                 ✅
+SaliconDataset PyTorch             ✅
+Preprocessing RGB                  ✅
+Preprocessing density map          ✅
+Horizontal flip sincronizzato      ✅
+DataLoader                         ✅
+Smoke test                         ✅
 
-Archivio salicon.tar           ✅
-Cache locale Colab             ✅
+FIXATION PIPELINE
+Parsing file .mat SALICON          ✅
+Aggregazione fixation osservatori  ✅
+Coordinate 1-based → 0-based       ✅
+Resize fixation a 256×192          ✅
 
-Split riproducibile            ✅
-split_manifest.csv             ✅
-
-SaliconDataset PyTorch         ✅
-Preprocessing                  ✅
-Data augmentation              ✅
-DataLoader                     ✅
-Smoke test                     ✅
+METRICHE
+CC                                 ✅
+SIM                                ✅
+KLD                                ✅
+NSS                                ✅
+sAUC                               ✅
+Unit test metriche                 ✅ 12 passed
+Sanity check NSS su SALICON        ✅
+Sanity check sAUC su SALICON       ✅
 ```
 
-Il prossimo blocco di lavoro riguarda:
+Il prossimo blocco di lavoro è:
 
 ```text
-Metriche CC / SIM / KLD
-↓
-B0
-↓
-B1
-↓
+B0 — Center Prior
+        ↓
+B1 — ResNet18 + decoder
+        ↓
 M1
-↓
+        ↓
 M1-L
-↓
-G
-↓
-M2
+        ↓
+G — Adaptive Center Prior
+        ↓
+M2 — Transformer gerarchico
 ```
 
 ---
@@ -121,18 +133,24 @@ Project_NN/
 ├── scripts/
 │   ├── audit_dataset.py
 │   ├── download_salicon.py
-│   └── smoke_test.py
+│   ├── smoke_test.py
+│   └── train.py
 │
 ├── src/
+│   ├── __init__.py
 │   ├── data/
 │   │   ├── __init__.py
 │   │   ├── dataset.py
+│   │   ├── fixations.py
 │   │   └── splits.py
-│   │
 │   ├── losses/
-│   └── models/
+│   ├── models/
+│   │   ├── __init__.py
+│   │   └── baseline.py
+│   └── metrics.py
 │
 ├── tests/
+│   └── test_metrics.py
 │
 ├── .gitignore
 ├── README.md
@@ -140,7 +158,7 @@ Project_NN/
 └── requirements-colab.txt
 ```
 
-Le cartelle `src/losses/`, `src/models/` e `tests/` verranno riempite progressivamente durante le prossime fasi.
+Le parti di training e modellazione verranno completate progressivamente durante gli esperimenti B0/B1/M1/M1-L/G/M2.
 
 ---
 
@@ -410,6 +428,26 @@ Durante ogni nuova sessione Colab il file viene estratto in:
 ```text
 /content/data_local
 ```
+
+## Technical debt noto sul layout
+
+In alcune estrazioni è stata osservata una struttura legacy:
+
+```text
+images/images/train
+images/images/val
+images/images/test
+```
+
+mentre il layout atteso è:
+
+```text
+images/train
+images/val
+images/test
+```
+
+Nella sessione corrente la struttura è stata corretta e la pipeline funziona. La sistemazione definitiva di `salicon.tar` / della cella `6bis` è rimandata e non blocca lo sviluppo di B0.
 
 ---
 
@@ -740,25 +778,55 @@ perché altererebbero direttamente la distribuzione spaziale dell'attenzione che
 
 # Fixation data
 
-I fixation file sono disponibili in formato:
+I fixation file SALICON sono disponibili in formato:
 
 ```text
 .mat
 ```
 
-Il Dataset attualmente restituisce:
-
-```python
-sample["fixation_path"]
-```
-
-Esempio:
+L'ispezione dei file ha mostrato la struttura principale:
 
 ```text
-/content/data_local/fixations/train/COCO_train2014_XXXXXXXXXXXX.mat
+image
+resolution
+gaze
 ```
 
-Il parsing effettivo del contenuto `.mat` verrà implementato nella fase dedicata a NSS/sAUC.
+Il campo `gaze` contiene:
+
+```text
+location
+timestamp
+fixations
+```
+
+Le fixation sono memorizzate per osservatore come array `[N, 2]` con coordinate `[x, y]`.
+
+È stato verificato su 500 file che le coordinate SALICON sono **1-based**:
+
+```text
+x ∈ [1, 640]
+y ∈ [1, 480]
+```
+
+La pipeline converte quindi le coordinate in formato Python/PyTorch 0-based e le ridimensiona da `640×480` a `256×192`.
+
+La logica permanente è implementata in:
+
+```text
+src/data/fixations.py
+```
+
+Il parser:
+
+- legge il file `.mat`;
+- estrae `gaze["fixations"]`;
+- aggrega le fixation dei diversi osservatori;
+- legge la risoluzione originale;
+- converte le coordinate da 1-based a 0-based;
+- ridimensiona le coordinate alla risoluzione usata dal modello.
+
+Il parser è SALICON-specifico; le metriche rimangono invece il più possibile indipendenti dal dataset.
 
 ---
 
@@ -853,44 +921,141 @@ Smoke test                    ✅
 
 ---
 
-# Prossimi passi
+# Metriche di valutazione
 
-## 1. Metriche
+Le metriche sono implementate in:
 
-Implementare:
+```text
+src/metrics.py
+```
+
+Sono disponibili:
 
 ```text
 CC
 SIM
 KLD
-```
-
-Queste saranno le metriche principali utilizzate per confrontare tutti i modelli.
-
-Dato che le fixation sono disponibili, successivamente implementare anche:
-
-```text
 NSS
 sAUC
 ```
 
+I test automatici sono contenuti in:
+
+```text
+tests/test_metrics.py
+```
+
+Risultato attuale:
+
+```text
+12 passed
+```
+
+## CC — Correlation Coefficient
+
+Misura la correlazione lineare tra prediction e target. **Più alto è meglio**.
+
+```text
++1  correlazione perfetta
+ 0  nessuna correlazione lineare
+-1  correlazione inversa
+```
+
+## SIM — Similarity
+
+Le mappe vengono normalizzate come distribuzioni e viene calcolata la loro sovrapposizione. **Più alto è meglio**.
+
+```text
+SIM = Σ min(P, Q)
+```
+
+Range ideale: `0 → 1`.
+
+## KLD — Kullback-Leibler Divergence
+
+Nel progetto viene usata esplicitamente la convenzione:
+
+```text
+KLD(target || prediction)
+```
+
+Il valore ideale è `0`; **più basso è meglio**. La stessa convenzione deve essere mantenuta in tutti gli esperimenti.
+
+## NSS — Normalized Scanpath Saliency
+
+NSS usa le fixation reali degli osservatori. La saliency map viene standardizzata e si calcola la media dei valori standardizzati nei punti fissati. **Più alto è meglio**.
+
+È stato eseguito con successo anche un sanity check end-to-end su una vera density map SALICON e sulle relative fixation. Il valore ottenuto non rappresenta una performance di un modello, perché la ground-truth density map è stata usata temporaneamente come prediction.
+
+## sAUC — Shuffled AUC
+
+sAUC utilizza fixation positive della stessa immagine e fixation negative provenienti da altre immagini. Aiuta a ridurre il vantaggio dovuto al center bias.
+
+```text
+0.0 → separazione pessima
+0.5 → comportamento casuale
+1.0 → separazione perfetta
+```
+
+È stato eseguito con successo un sanity check end-to-end su SALICON. Per il sanity check sono state usate fixation negative provenienti da una seconda immagine. Il protocollo definitivo di evaluation dovrà fissare in modo riproducibile il campionamento delle fixation negative da più immagini.
+
+## Test delle metriche
+
+I test verificano, tra le altre cose:
+
+```text
+Mappe identiche:
+CC  ≈ 1
+SIM ≈ 1
+KLD ≈ 0
+
+NSS:
+fixation su regione saliente     → valore positivo
+fixation su regione non saliente → valore negativo
+mappa costante                   → NSS = 0
+
+sAUC:
+separazione perfetta             → 1
+separazione invertita            → 0
+parità completa                  → 0.5
+```
+
+Esecuzione:
+
+```bash
+pytest -q tests/test_metrics.py
+```
+
+Output verificato:
+
+```text
+12 passed
+```
+
 ---
 
-## 2. B0 — Center Prior
+# Prossimi passi
 
-B0 rappresenta la baseline più semplice.
+## 1. B0 — Center Prior
 
-Non richiede una rete neurale.
+**B0 è il prossimo obiettivo operativo.**
 
-La predizione viene ottenuta dalla saliency media calcolata sul training set.
+Non richiede una rete neurale. La predizione verrà ottenuta dalla saliency media calcolata sulle density map del training set.
 
-Serve a quantificare quanto del problema possa essere spiegato solamente dal **center bias**.
+```text
+density map train 1
+density map train 2
+...
+density map train N
+        ↓
+       media
+        ↓
+   CENTER PRIOR
+```
 
----
+B0 serve a misurare quanto del problema possa essere spiegato esclusivamente dal **center bias** e il prior ottenuto verrà riutilizzato successivamente nel modello G.
 
-## 3. B1 — Baseline neurale
-
-B1 utilizzerà:
+## 2. B1 — Baseline neurale
 
 ```text
 ResNet18 pretrained
@@ -900,141 +1065,38 @@ decoder semplice
 MSE
 ```
 
-Costituirà la baseline neurale principale.
+## 3. M1 — Multi-scale
+
+M1 aggiungerà feature multi-scala `C3/C4/C5` mantenendo la stessa MSE di B1.
+
+## 4. M1-L — Cambio della loss
+
+M1-L manterrà l'architettura di M1 e userà `CC-loss + KLD`.
+
+## 5. G — Adaptive Center Prior
+
+G aggiungerà l'Adaptive Center Prior sopra M1-L.
+
+## 6. M2 — Advanced model
+
+M2 utilizzerà un encoder Transformer gerarchico leggero mantenendo il decoder il più possibile comparabile con M1/M1-L.
 
 ---
 
-## 4. M1 — Multi-scale
-
-M1 aggiungerà a B1 feature multi-scala provenienti da:
-
-```text
-C3
-C4
-C5
-```
-
-tramite skip connections.
-
-La loss rimarrà la stessa di B1:
-
-```text
-MSE
-```
-
-In questo modo:
-
-```text
-B1 → M1
-```
-
-isolerà l'effetto dell'architettura multi-scala.
-
----
-
-## 5. M1-L — Loss
-
-M1-L manterrà esattamente la stessa architettura di M1.
-
-Cambierà solamente la loss:
-
-```text
-CC-loss + KLD
-```
-
-Quindi:
-
-```text
-M1 → M1-L
-```
-
-misurerà l'effetto del cambio di funzione obiettivo.
-
----
-
-## 6. G — Adaptive Center Prior
-
-G rappresenta la componente originale principale del progetto.
-
-Verrà aggiunto un **Adaptive Center Prior** sopra M1-L.
-
-L'idea è imparare un coefficiente:
-
-```text
-α(x)
-```
-
-dipendente dall'immagine.
-
-Concettualmente:
-
-```text
-S(x) =
-(1 - α(x)) * S_M1-L(x)
-+
-α(x) * P_center
-```
-
-dove:
-
-```text
-P_center
-```
-
-è il prior ottenuto da B0.
-
-L'obiettivo è permettere alla rete di imparare quando il center bias è utile e quando invece deve essere ignorato.
-
-G è una parte centrale del progetto e non deve essere eliminato in caso di mancanza di tempo.
-
----
-
-## 7. M2 — Advanced
-
-M2 utilizzerà un encoder Transformer gerarchico leggero.
-
-La scelta consigliata è utilizzare tramite `timm` un backbone capace di produrre feature multi-scala, ad esempio:
-
-```text
-Swin
-PVT
-```
-
-con interfaccia:
-
-```python
-features_only=True
-```
-
-L'obiettivo è mantenere il decoder comparabile con M1/M1-L e modificare principalmente l'encoder.
-
----
-
-# Metriche finali
-
-Metriche principali:
-
-```text
-CC
-SIM
-KLD
-```
-
-Metriche aggiuntive grazie alle fixation:
-
-```text
-NSS
-sAUC
-```
+# Protocollo di evaluation
 
 Tutti i modelli devono utilizzare:
 
 ```text
-lo stesso preprocessing
-lo stesso split
-lo stesso internal test
-lo stesso protocollo di evaluation
+stesso preprocessing
+stesso split
+stesso internal test
+stesse metriche
+stessa convenzione KLD
+stesso protocollo per NSS/sAUC
 ```
+
+Il protocollo definitivo di sAUC dovrà specificare in modo riproducibile la selezione delle fixation negative.
 
 ---
 
@@ -1281,9 +1343,7 @@ FASE 1 — SETUP
 FASE 2 — DATA PIPELINE
 ✅ SALICON
 ✅ Audit
-✅ Fixation
-✅ salicon.tar
-✅ Cache locale
+✅ Fixation files
 ✅ Split
 ✅ Manifest
 ✅ Dataset PyTorch
@@ -1292,32 +1352,43 @@ FASE 2 — DATA PIPELINE
 ✅ DataLoader
 ✅ Smoke test
 
-FASE 3 — METRICHE
-⏳ CC
-⏳ SIM
-⏳ KLD
-⏳ NSS
-⏳ sAUC
+FASE 3 — FIXATION PIPELINE
+✅ Analisi struttura .mat
+✅ Estrazione gaze["fixations"]
+✅ Aggregazione osservatori
+✅ Verifica coordinate 1-based
+✅ Conversione 1-based → 0-based
+✅ Resize fixation a 256×192
 
-FASE 4 — BASELINE
+FASE 4 — METRICHE
+✅ CC
+✅ SIM
+✅ KLD
+✅ NSS
+✅ sAUC
+✅ 12 unit test
+✅ NSS sanity check
+✅ sAUC sanity check
+
+FASE 5 — BASELINE
 ⏳ B0 Center Prior
 ⏳ B1 ResNet18 + decoder
 
-FASE 5 — MODELLI
+FASE 6 — MODELLI
 ⏳ M1
 ⏳ M1-L
 ⏳ G
 ⏳ M2
 
-FASE 6 — TRAINING / EVALUATION
-⏳ Training loop
+FASE 7 — TRAINING / EVALUATION
+⏳ Training loop definitivo
 ⏳ Checkpoint/resume
-⏳ Evaluation
+⏳ Evaluation completa
+⏳ Protocollo sAUC definitivo
 ⏳ Bootstrap CI
 ⏳ Figure qualitative
 
-FASE 7 — CONSEGNA
-⏳ README definitivo
+FASE 8 — CONSEGNA
 ⏳ Riproducibilità da clone pulito
 ⏳ Report finale
 ```
@@ -1326,26 +1397,29 @@ FASE 7 — CONSEGNA
 
 # Prossimo obiettivo operativo
 
-Il prossimo blocco di sviluppo è:
-
-```text
-Implementazione e verifica di:
-
-CC
-SIM
-KLD
-```
-
-Una volta validate le metriche si procederà con:
+Il prossimo esperimento da implementare è:
 
 ```text
 B0 — Center Prior
 ```
 
-e successivamente:
+Obiettivo:
+
+```text
+density map del training set
+        ↓
+media spaziale
+        ↓
+center prior normalizzato
+        ↓
+evaluation con
+CC / SIM / KLD / NSS / sAUC
+```
+
+Dopo B0 si procederà con:
 
 ```text
 B1 — ResNet18 + decoder + MSE
 ```
 
-Da quel momento inizierà la parte di training e confronto sperimentale dei modelli.
+Da quel momento inizierà il confronto sperimentale tra baseline e modelli neurali.

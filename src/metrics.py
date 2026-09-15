@@ -360,3 +360,217 @@ def nss(
     ]
 
     return fixation_values.mean()
+
+def sauc(
+    prediction: torch.Tensor,
+    fixation_coordinates,
+    negative_fixation_coordinates,
+) -> torch.Tensor:
+    """
+    Shuffled AUC (sAUC).
+
+    Parameters
+    ----------
+    prediction : torch.Tensor
+        Saliency map prevista.
+
+        Shape supportate:
+            [H, W]
+            [1, H, W]
+            [1, 1, H, W]
+
+    fixation_coordinates : array-like
+        Fixation positive della stessa immagine.
+
+        Shape:
+            [N, 2]
+
+        Coordinate:
+            [x, y]
+
+    negative_fixation_coordinates : array-like
+        Fixation provenienti da altre immagini,
+        utilizzate come campioni negativi.
+
+        Shape:
+            [M, 2]
+
+        Coordinate:
+            [x, y]
+
+    Returns
+    -------
+    torch.Tensor
+        Valore sAUC.
+
+    Note
+    ----
+    Range:
+        0.0 -> pessimo
+        0.5 -> comportamento casuale
+        1.0 -> separazione perfetta
+
+    Più alto è meglio.
+
+    Le coordinate devono essere già:
+        - 0-based
+        - ridimensionate alla stessa risoluzione
+          della prediction.
+    """
+
+    pred = prediction.float()
+
+    # -----------------------------------------------------
+    # Portiamo prediction alla forma [H, W]
+    # -----------------------------------------------------
+
+    if pred.ndim == 4:
+
+        if pred.shape[0] != 1 or pred.shape[1] != 1:
+            raise ValueError(
+                "sAUC accetta una singola saliency map. "
+                "Per input 4D è richiesta shape [1, 1, H, W]."
+            )
+
+        pred = pred[0, 0]
+
+    elif pred.ndim == 3:
+
+        if pred.shape[0] != 1:
+            raise ValueError(
+                "Per input 3D è richiesta shape [1, H, W]."
+            )
+
+        pred = pred[0]
+
+    elif pred.ndim != 2:
+
+        raise ValueError(
+            "Prediction deve avere shape "
+            "[H,W], [1,H,W] oppure [1,1,H,W]."
+        )
+
+    height, width = pred.shape
+
+    # -----------------------------------------------------
+    # Coordinate positive
+    # -----------------------------------------------------
+
+    positives = torch.as_tensor(
+        fixation_coordinates,
+        dtype=torch.long,
+        device=pred.device,
+    )
+
+    if positives.ndim != 2 or positives.shape[1] != 2:
+        raise ValueError(
+            "fixation_coordinates deve avere shape [N, 2]."
+        )
+
+    if positives.shape[0] == 0:
+        raise ValueError(
+            "sAUC richiede almeno una fixation positiva."
+        )
+
+    # -----------------------------------------------------
+    # Coordinate negative
+    # -----------------------------------------------------
+
+    negatives = torch.as_tensor(
+        negative_fixation_coordinates,
+        dtype=torch.long,
+        device=pred.device,
+    )
+
+    if negatives.ndim != 2 or negatives.shape[1] != 2:
+        raise ValueError(
+            "negative_fixation_coordinates "
+            "deve avere shape [M, 2]."
+        )
+
+    if negatives.shape[0] == 0:
+        raise ValueError(
+            "sAUC richiede almeno una fixation negativa."
+        )
+
+    # -----------------------------------------------------
+    # Controllo coordinate
+    # -----------------------------------------------------
+
+    pos_x = positives[:, 0]
+    pos_y = positives[:, 1]
+
+    neg_x = negatives[:, 0]
+    neg_y = negatives[:, 1]
+
+    positive_out_of_bounds = (
+        torch.any(pos_x < 0)
+        or torch.any(pos_x >= width)
+        or torch.any(pos_y < 0)
+        or torch.any(pos_y >= height)
+    )
+
+    negative_out_of_bounds = (
+        torch.any(neg_x < 0)
+        or torch.any(neg_x >= width)
+        or torch.any(neg_y < 0)
+        or torch.any(neg_y >= height)
+    )
+
+    if positive_out_of_bounds:
+        raise ValueError(
+            "Sono presenti fixation positive fuori "
+            "dai limiti della saliency map."
+        )
+
+    if negative_out_of_bounds:
+        raise ValueError(
+            "Sono presenti fixation negative fuori "
+            "dai limiti della saliency map."
+        )
+
+    # -----------------------------------------------------
+    # Saliency nei punti positivi e negativi
+    #
+    # Coordinate = [x, y]
+    # Tensor      = [y, x]
+    # -----------------------------------------------------
+
+    positive_scores = pred[
+        pos_y,
+        pos_x,
+    ]
+
+    negative_scores = pred[
+        neg_y,
+        neg_x,
+    ]
+
+    # -----------------------------------------------------
+    # AUC
+    #
+    # Equivalentemente:
+    #
+    # P(score positivo > score negativo)
+    #
+    # In caso di parità assegniamo 0.5.
+    # -----------------------------------------------------
+
+    differences = (
+        positive_scores[:, None]
+        - negative_scores[None, :]
+    )
+
+    wins = (
+        differences > 0
+    ).float()
+
+    ties = (
+        differences == 0
+    ).float()
+
+    auc = (
+        wins + 0.5 * ties
+    ).mean()
+
+    return auc

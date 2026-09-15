@@ -8,7 +8,7 @@ import torch
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
-from src.metrics import cc, sim, kld, nss
+from src.metrics import cc, sim, kld, nss, sauc
 
 
 def test_identical_maps():
@@ -309,5 +309,118 @@ def test_nss_constant_map():
     assert torch.isclose(
         score,
         torch.tensor(0.0),
+        atol=1e-6,
+    )
+
+def test_sauc_perfect_separation():
+    """
+    Le fixation positive cadono su saliency alta,
+    quelle negative su saliency bassa.
+
+    sAUC deve essere 1.
+    """
+
+    prediction = torch.tensor(
+        [
+            [0.0, 0.0, 0.0],
+            [0.0, 10.0, 0.0],
+            [0.0, 0.0, 0.0],
+        ],
+        dtype=torch.float32,
+    )
+
+    positive_fixations = [
+        [1, 1],
+    ]
+
+    negative_fixations = [
+        [0, 0],
+        [2, 0],
+        [0, 2],
+        [2, 2],
+    ]
+
+    score = sauc(
+        prediction,
+        positive_fixations,
+        negative_fixations,
+    )
+
+    assert torch.isclose(
+        score,
+        torch.tensor(1.0),
+        atol=1e-6,
+    )
+
+
+def test_sauc_wrong_separation():
+    """
+    Le fixation positive cadono su saliency bassa
+    mentre le negative cadono sulla saliency massima.
+
+    sAUC deve essere 0.
+    """
+
+    prediction = torch.tensor(
+        [
+            [0.0, 0.0, 0.0],
+            [0.0, 10.0, 0.0],
+            [0.0, 0.0, 0.0],
+        ],
+        dtype=torch.float32,
+    )
+
+    positive_fixations = [
+        [0, 0],
+    ]
+
+    negative_fixations = [
+        [1, 1],
+    ]
+
+    score = sauc(
+        prediction,
+        positive_fixations,
+        negative_fixations,
+    )
+
+    assert torch.isclose(
+        score,
+        torch.tensor(0.0),
+        atol=1e-6,
+    )
+
+
+def test_sauc_ties():
+    """
+    Se positivi e negativi hanno esattamente
+    la stessa saliency, l'AUC deve essere 0.5.
+    """
+
+    prediction = torch.ones(
+        3,
+        3,
+        dtype=torch.float32,
+    )
+
+    positive_fixations = [
+        [1, 1],
+        [0, 0],
+    ]
+
+    negative_fixations = [
+        [2, 2],
+        [0, 2],
+    ]
+
+    score = sauc(
+        prediction,
+        positive_fixations,
+        negative_fixations,
+    )
+
+    assert torch.isclose(
+        score,
+        torch.tensor(0.5),
         atol=1e-6,
     )

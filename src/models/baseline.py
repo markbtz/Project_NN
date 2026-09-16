@@ -4,12 +4,14 @@ Vedi configs/experiments.yaml per la definizione del disegno sperimentale.
 
 B1 usa SOLO la feature finale dell'encoder (C5, stride 32): niente skip
 connections qui — quelle arrivano con M1 (di competenza di C). Tenere questo
-file "semplice" è intenzionale: e' il confronto pulito rispetto a cui M1
+file "semplice" e' intenzionale: e' il confronto pulito rispetto a cui M1
 deve dimostrare un miglioramento.
 
 Smoke test locale (funziona anche senza dataset reale):
     python src/models/baseline.py
 """
+import random
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -25,20 +27,37 @@ def get_device() -> torch.device:
     return torch.device("cpu")
 
 
+def set_seed(seed: int):
+    """
+    Seed globale per riproducibilita' (vedi configs/data.yaml -> seed).
+
+    IMPORTANTE: SaliconDataset usa random.random() (modulo Python standard,
+    non torch) per decidere l'horizontal flip — settare solo
+    torch.manual_seed() NON basta, l'augmentation resterebbe non
+    deterministica. Chiamare questa funzione una sola volta, a inizio script,
+    prima di costruire dataset/dataloader/modello.
+    """
+    random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+
 def to_probability_map(x: torch.Tensor, eps: float = 1e-6) -> torch.Tensor:
     """
     Converte una mappa (B, 1, H, W) in una distribuzione di probabilita' a
     somma 1 su (H, W):
         P = (P + eps) / sum(P + eps)
-    Stessa formula di configs/data.yaml -> density_map_epsilon.
+    Stessa formula di configs/data.yaml -> density_map_epsilon, e stessa
+    convenzione di density_map_prob in src/data/dataset.py.
 
     USARE SOLO in fase di valutazione (CC/SIM/KLD) o per il prior B0/G, MAI
     come output diretto di un modello allenato con MSE: su immagini di
     ~50.000 pixel il valore medio per pixel scende a ~2e-5, rendendo la MSE
-    numericamente invisibile (arrotonda a 0.000000) e il gradiente troppo
-    piccolo per un training efficace. I modelli restituiscono una mappa
-    "grezza" in [0, 1] (vedi B1Baseline.forward); si normalizza a
-    probabilita' solo quando serve per le metriche.
+    numericamente invisibile e il gradiente troppo piccolo per un training
+    efficace. I modelli restituiscono una mappa "grezza" in [0, 1] (vedi
+    B1Baseline.forward, confrontabile con density_map_raw del dataset); si
+    normalizza a probabilita' solo quando serve per le metriche.
     """
     x = torch.clamp(x, min=0.0)
     num = x + eps
@@ -50,12 +69,12 @@ class CenterPriorB0(nn.Module):
     """
     B0 — center prior: nessun training via backprop.
 
-    La mappa e' la media delle density_map_prob del training set,
-    cioe' density map gia' normalizzate come distribuzioni
-    di probabilita' con somma spaziale circa uguale a 1.
+    La mappa e' la media delle density_map_prob del training set, cioe'
+    density map gia' normalizzate come distribuzioni di probabilita' con
+    somma spaziale circa uguale a 1.
 
     Qui il prior viene inizializzato come distribuzione uniforme.
-    Usare fit() per calcolarlo sui dati reali SALICON.
+    Usare fit() o fit_from_loader() per calcolarlo sui dati reali SALICON.
     """
 
     def __init__(self, height: int, width: int):
@@ -68,18 +87,41 @@ class CenterPriorB0(nn.Module):
     @torch.no_grad()
     def fit(self, density_maps: torch.Tensor, eps: float = 1e-6):
         """
-        density_maps: (N, 1, H, W) density_map_prob del training set.
-
-        Ogni mappa in input e' gia' una distribuzione di probabilita'
-        con somma spaziale circa uguale a 1.
-
-        B0 calcola la media delle mappe di training e normalizza
-        nuovamente il risultato per garantire che il center prior
-        finale abbia somma spaziale uguale a 1.
+        density_maps: (N, 1, H, W) density_map_prob del training set, GIA'
+        interamente in memoria. Va bene per pochi campioni (es. smoke test);
+        per il dataset reale (10.000 immagini, ~1.9 GB solo per questo
+        tensore) usare fit_from_loader() per non rischiare OOM su Colab
+        free o M1 Max.
         """
         mean_map = density_maps.mean(dim=0, keepdim=True)
         self.center_map.copy_(to_probability_map(mean_map, eps=eps))
-        
+
+    @torch.no_grad()
+    def fit_from_loader(self, density_map_batches, eps: float = 1e-6):
+        """
+        Come fit(), ma accumula una somma incrementale batch per batch
+        invece di concatenare tutto in un unico tensore in memoria.
+
+        density_map_batches: iterable di tensori (B, 1, H, W) — tipicamente
+        un generatore che itera un DataLoader e restituisce
+        batch["density_map_prob"]. Esempio d'uso in scripts/train.py:
+
+            def density_batches():
+                for batch in loader:
+                    yield batch["density_map_prob"].to(device)
+            model.fit_from_loader(density_batches())
+        """
+        total = None
+        count = 0
+        for batch in density_map_batches:
+            batch_sum = batch.sum(dim=0, keepdim=True).to(self.center_map.dtype)
+            total = batch_sum if total is None else total + batch_sum
+            count += batch.shape[0]
+        if count == 0:
+            raise ValueError("fit_from_loader: nessun batch ricevuto, il loader e' vuoto.")
+        mean_map = total / count
+        self.center_map.copy_(to_probability_map(mean_map, eps=eps))
+
     def forward(self, batch_size: int) -> torch.Tensor:
         return self.center_map.expand(batch_size, -1, -1, -1)
 
@@ -148,12 +190,14 @@ class SingleBottleneckDecoder(nn.Module):
 class B1Baseline(nn.Module):
     """
     B1 completo: ResNet18Encoder (solo C5) + SingleBottleneckDecoder.
-    Loss di riferimento: MSE (vedi configs/experiments.yaml).
+    Loss di riferimento: MSE (vedi configs/experiments.yaml), calcolata in
+    train.py direttamente contro density_map_raw del dataset.
 
     forward() restituisce una mappa "grezza" (0-1 per pixel, via sigmoid),
-    NON normalizzata a somma 1 — la MSE di training va calcolata su questa.
-    Usare predict_probability() (o to_probability_map() direttamente) solo
-    in fase di valutazione, per CC/SIM/KLD.
+    NON normalizzata a somma 1 — la MSE di training va calcolata su questa,
+    confrontandola con density_map_raw (stessa scala). Usare
+    predict_probability() (o to_probability_map() direttamente) solo in
+    fase di valutazione, per CC/SIM/KLD, confrontandola con density_map_prob.
     """
     def __init__(self, pretrained: bool = True, decoder_width: int = 96):
         super().__init__()
@@ -193,8 +237,20 @@ if __name__ == "__main__":
 
     b0 = CenterPriorB0(height=height, width=width).to(device)
     dummy_density_raw = torch.rand(10, 1, height, width, device=device)
-    dummy_density_prob=to_probability_map(dummy_density_raw)
+    dummy_density_prob = to_probability_map(dummy_density_raw)
     b0.fit(dummy_density_prob)
     center_out = b0(batch_size)
     print(f"B0 output shape: {tuple(center_out.shape)}")
     print(f"B0 somma (deve essere ~1): {center_out[0].sum().item():.6f}")
+
+    # Smoke test aggiuntivo per fit_from_loader (nuova funzionalita')
+    b0_loader = CenterPriorB0(height=height, width=width).to(device)
+
+    def dummy_batches():
+        for _ in range(3):
+            raw = torch.rand(4, 1, height, width, device=device)
+            yield to_probability_map(raw)
+
+    b0_loader.fit_from_loader(dummy_batches())
+    center_out_loader = b0_loader(batch_size)
+    print(f"B0 (fit_from_loader) somma (deve essere ~1): {center_out_loader[0].sum().item():.6f}")

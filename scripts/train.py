@@ -45,9 +45,16 @@ from src.models.baseline import (
     B1Baseline,
     CenterPriorB0,
     get_device,
+    set_seed,
 )
 
 from src.data.dataset import SaliconDataset
+
+
+# Seed unico per tutto il progetto (vedi configs/data.yaml -> seed).
+# Tenuto qui come costante esplicita finche' non e' collegato il caricamento
+# reale dello YAML in questo script (vedi roadmap README, punto ancora aperto).
+GLOBAL_SEED = 42
 
 
 def save_checkpoint(
@@ -264,8 +271,13 @@ def fit_b0(args, device):
     """
     B0 non si allena via backprop.
 
-    Calcola il center prior come media delle
-    density_map_prob del training set.
+    Calcola il center prior come media delle density_map_prob del training
+    set, in streaming (fit_from_loader): con 10.000 immagini, tenere tutte
+    le density map insieme in memoria (come faceva la versione precedente
+    con torch.cat) costa circa 1.9 GB solo per quel tensore — un rischio
+    concreto di OOM su Colab free. fit_from_loader accumula una somma
+    incrementale, un batch alla volta, senza mai avere tutto il dataset in
+    RAM contemporaneamente.
     """
 
     train_dataset = SaliconDataset(
@@ -286,31 +298,16 @@ def fit_b0(args, device):
         shuffle=False,
     )
 
-    all_maps = []
-
-    for batch in loader:
-
-        targets = batch[
-            "density_map_prob"
-        ]
-
-        all_maps.append(
-            targets
-        )
-
-    all_maps = torch.cat(
-        all_maps,
-        dim=0,
-    ).to(device)
+    def density_batches():
+        for batch in loader:
+            yield batch["density_map_prob"].to(device)
 
     model = CenterPriorB0(
         height=args.height,
         width=args.width,
     ).to(device)
 
-    model.fit(
-        all_maps
-    )
+    model.fit_from_loader(density_batches())
 
     checkpoint_path = os.path.join(
         args.checkpoint_dir,
@@ -401,10 +398,16 @@ def main():
 
     args = parser.parse_args()
 
+    set_seed(GLOBAL_SEED)
+
     device = get_device()
 
     print(
         f"Device: {device}"
+    )
+
+    print(
+        f"Seed: {GLOBAL_SEED}"
     )
 
     print(

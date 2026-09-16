@@ -48,13 +48,16 @@ def to_probability_map(x: torch.Tensor, eps: float = 1e-6) -> torch.Tensor:
 
 class CenterPriorB0(nn.Module):
     """
-    B0 — center prior: nessun training via backprop. La mappa e' la media
-    delle density map del training set.
+    B0 — center prior: nessun training via backprop.
 
-    Qui e' inizializzata uniforme; usare fit() per calcolarla su dati reali.
-    fit() accetta anche dati fittizi per testare il meccanismo prima che il
-    DataLoader vero sia pronto.
+    La mappa e' la media delle density_map_prob del training set,
+    cioe' density map gia' normalizzate come distribuzioni
+    di probabilita' con somma spaziale circa uguale a 1.
+
+    Qui il prior viene inizializzato come distribuzione uniforme.
+    Usare fit() per calcolarlo sui dati reali SALICON.
     """
+
     def __init__(self, height: int, width: int):
         super().__init__()
         self.height = height
@@ -64,12 +67,19 @@ class CenterPriorB0(nn.Module):
 
     @torch.no_grad()
     def fit(self, density_maps: torch.Tensor, eps: float = 1e-6):
-        """density_maps: (N, 1, H, W) "grezze" (0-1 per pixel, NON a somma 1).
-        B0 e' per definizione un prior di probabilita': la media viene
-        convertita a somma 1 qui dentro, una volta sola."""
-        mean_map = density_maps.mean(dim=0, keepdim=True)  # (1, 1, H, W)
-        self.center_map.copy_(to_probability_map(mean_map, eps=eps))
+        """
+        density_maps: (N, 1, H, W) density_map_prob del training set.
 
+        Ogni mappa in input e' gia' una distribuzione di probabilita'
+        con somma spaziale circa uguale a 1.
+
+        B0 calcola la media delle mappe di training e normalizza
+        nuovamente il risultato per garantire che il center prior
+        finale abbia somma spaziale uguale a 1.
+        """
+        mean_map = density_maps.mean(dim=0, keepdim=True)
+        self.center_map.copy_(to_probability_map(mean_map, eps=eps))
+        
     def forward(self, batch_size: int) -> torch.Tensor:
         return self.center_map.expand(batch_size, -1, -1, -1)
 
@@ -182,8 +192,9 @@ if __name__ == "__main__":
     print(f"B1 probabilita' — somma per immagine (deve essere ~1): {[round(s, 6) for s in sums]}")
 
     b0 = CenterPriorB0(height=height, width=width).to(device)
-    dummy_density = torch.rand(10, 1, height, width, device=device)  # mappe grezze, non a somma 1
-    b0.fit(dummy_density)
+    dummy_density_raw = torch.rand(10, 1, height, width, device=device)
+    dummy_density_prob=to_probability_map(dummy_density_raw)
+    b0.fit(dummy_density_prob)
     center_out = b0(batch_size)
     print(f"B0 output shape: {tuple(center_out.shape)}")
     print(f"B0 somma (deve essere ~1): {center_out[0].sum().item():.6f}")

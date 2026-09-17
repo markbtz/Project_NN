@@ -424,3 +424,193 @@ def test_sauc_ties():
         torch.tensor(0.5),
         atol=1e-6,
     )
+
+
+def test_reduction_none_returns_one_value_per_sample():
+    """
+    CC/SIM/KLD con reduction="none" devono restituire
+    un valore per ogni elemento del batch.
+    """
+
+    target = torch.rand(
+        4,
+        1,
+        16,
+        16,
+    )
+
+    prediction = torch.rand(
+        4,
+        1,
+        16,
+        16,
+    )
+
+    cc_scores = cc(
+        prediction,
+        target,
+        reduction="none",
+    )
+
+    sim_scores = sim(
+        prediction,
+        target,
+        reduction="none",
+    )
+
+    kld_scores = kld(
+        prediction,
+        target,
+        reduction="none",
+    )
+
+    assert cc_scores.shape == (4,)
+    assert sim_scores.shape == (4,)
+    assert kld_scores.shape == (4,)
+
+    assert torch.isfinite(cc_scores).all()
+    assert torch.isfinite(sim_scores).all()
+    assert torch.isfinite(kld_scores).all()
+
+
+def test_reduction_mean_matches_none_mean():
+    """
+    Il comportamento di default deve coincidere con
+    la media dei valori per immagine.
+    """
+
+    target = torch.rand(
+        5,
+        1,
+        16,
+        16,
+    )
+
+    prediction = torch.rand(
+        5,
+        1,
+        16,
+        16,
+    )
+
+    for metric in (cc, sim, kld):
+        score_mean = metric(
+            prediction,
+            target,
+        )
+
+        scores_none = metric(
+            prediction,
+            target,
+            reduction="none",
+        )
+
+        assert torch.allclose(
+            score_mean,
+            scores_none.mean(),
+            atol=1e-7,
+        )
+
+
+def test_invalid_reduction_raises_error():
+    """
+    Una reduction non supportata deve fallire esplicitamente.
+    """
+
+    target = torch.rand(
+        2,
+        1,
+        8,
+        8,
+    )
+
+    prediction = torch.rand(
+        2,
+        1,
+        8,
+        8,
+    )
+
+    for metric in (cc, sim, kld):
+        try:
+            metric(
+                prediction,
+                target,
+                reduction="invalid",
+            )
+
+        except ValueError:
+            pass
+
+        else:
+            raise AssertionError(
+                "La metrica avrebbe dovuto generare ValueError "
+                "per una reduction non valida."
+            )
+
+
+def test_reduction_none_supports_single_2d_map():
+    """
+    Una singola saliency map [H, W] deve essere supportata
+    anche con reduction="none".
+    """
+
+    target = torch.tensor(
+        [
+            [0.1, 0.2],
+            [0.3, 0.4],
+        ],
+        dtype=torch.float32,
+    )
+
+    prediction = target.clone()
+
+    for metric in (cc, sim, kld):
+        scores = metric(
+            prediction,
+            target,
+            reduction="none",
+        )
+
+        assert scores.shape == (1,)
+
+
+def test_reduction_none_preserves_sample_scores():
+    """
+    reduction="none" deve conservare il valore associato
+    a ciascun elemento del batch, senza mediare i campioni.
+    """
+
+    target = torch.tensor(
+        [
+            [[[0.0, 1.0], [2.0, 3.0]]],
+            [[[0.0, 1.0], [2.0, 3.0]]],
+        ],
+        dtype=torch.float32,
+    )
+
+    prediction = torch.tensor(
+        [
+            [[[0.0, 1.0], [2.0, 3.0]]],
+            [[[3.0, 2.0], [1.0, 0.0]]],
+        ],
+        dtype=torch.float32,
+    )
+
+    cc_scores = cc(
+        prediction,
+        target,
+        reduction="none",
+    )
+
+    assert torch.isclose(
+        cc_scores[0],
+        torch.tensor(1.0),
+        atol=1e-6,
+    )
+
+    assert torch.isclose(
+        cc_scores[1],
+        torch.tensor(-1.0),
+        atol=1e-6,
+    )

@@ -13,30 +13,67 @@ def _check_shapes(prediction: torch.Tensor, target: torch.Tensor) -> None:
         )
 
 
+def _apply_reduction(
+    values: torch.Tensor,
+    reduction: str,
+) -> torch.Tensor:
+    """
+    Applica la reduction alle metriche calcolate per campione.
+
+    reduction="mean":
+        restituisce la media del batch.
+
+    reduction="none":
+        restituisce un valore per ogni elemento del batch.
+    """
+
+    if reduction == "mean":
+        return values.mean()
+
+    if reduction == "none":
+        return values
+
+    raise ValueError(
+        f"Reduction non supportata: {reduction}. "
+        "Usare 'mean' oppure 'none'."
+    )
+
+
 def _flatten_batch(x: torch.Tensor) -> torch.Tensor:
     """
     Converte le mappe nella forma [B, N],
-    dove B è la batch size e N il numero di pixel.
+    dove B e' la batch size e N il numero di pixel.
 
     Supporta:
-    [H, W]
-    [1, H, W]
-    [B, 1, H, W]
+        [H, W]
+        [1, H, W]
+        [B, 1, H, W]
     """
 
     if x.ndim == 2:
-        x = x.unsqueeze(0)
+        x = x.unsqueeze(0).unsqueeze(0)
 
     elif x.ndim == 3:
+        if x.shape[0] != 1:
+            raise ValueError(
+                "Per input 3D e' richiesta shape [1, H, W]."
+            )
+
         x = x.unsqueeze(0)
 
-    if x.ndim != 4:
+    elif x.ndim == 4:
+        if x.shape[1] != 1:
+            raise ValueError(
+                "Per input 4D e' richiesta shape [B, 1, H, W]."
+            )
+
+    else:
         raise ValueError(
             "Input non valido. Attese shape "
             "[H,W], [1,H,W] oppure [B,1,H,W]."
         )
 
-    return x.reshape(x.shape[0], -1)
+    return x.flatten(start_dim=1)
 
 
 def _normalize_distribution(
@@ -65,6 +102,7 @@ def cc(
     prediction: torch.Tensor,
     target: torch.Tensor,
     eps: float = 1e-8,
+    reduction: str = "mean",
 ) -> torch.Tensor:
     """
     Correlation Coefficient (CC).
@@ -77,6 +115,10 @@ def cc(
        -1  -> correlazione inversa
 
     Più alto è meglio.
+
+    reduction:
+        "mean" -> media del batch (default)
+        "none" -> un valore per immagine
     """
 
     _check_shapes(prediction, target)
@@ -119,13 +161,17 @@ def cc(
         denominator + eps
     )
 
-    return score.mean()
+    return _apply_reduction(
+        score,
+        reduction,
+    )
 
 
 def sim(
     prediction: torch.Tensor,
     target: torch.Tensor,
     eps: float = 1e-8,
+    reduction: str = "mean",
 ) -> torch.Tensor:
     """
     Similarity Metric (SIM).
@@ -140,6 +186,10 @@ def sim(
         0 -> nessuna sovrapposizione
 
     Più alto è meglio.
+
+    reduction:
+        "mean" -> media del batch (default)
+        "none" -> un valore per immagine
     """
 
     _check_shapes(prediction, target)
@@ -159,13 +209,17 @@ def sim(
         gt,
     ).sum(dim=1)
 
-    return score.mean()
+    return _apply_reduction(
+        score,
+        reduction,
+    )
 
 
 def kld(
     prediction: torch.Tensor,
     target: torch.Tensor,
     eps: float = 1e-8,
+    reduction: str = "mean",
 ) -> torch.Tensor:
     """
     Kullback-Leibler Divergence.
@@ -182,6 +236,10 @@ def kld(
 
     0 significa distribuzioni identiche.
     Più basso è meglio.
+
+    reduction:
+        "mean" -> media del batch (default)
+        "none" -> un valore per immagine
     """
 
     _check_shapes(prediction, target)
@@ -204,7 +262,10 @@ def kld(
         )
     ).sum(dim=1)
 
-    return score.mean()
+    return _apply_reduction(
+        score,
+        reduction,
+    )
 
 def nss(
     prediction: torch.Tensor,

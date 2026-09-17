@@ -13,7 +13,11 @@ def normalize_probability_map(
     Normalizza gli ultimi due assi spaziali affinché
     ogni mappa abbia somma uguale a 1.
     """
-
+    if eps <= 0:
+        raise ValueError(
+            "eps deve essere > 0."
+        )
+    
     saliency_map = torch.clamp(
         saliency_map,
         min=0.0,

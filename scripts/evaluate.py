@@ -35,8 +35,6 @@ import torch
 import torch.nn as nn
 import yaml
 from torch.utils.data import DataLoader
-from src.models.factory import build_model
-
 
 REPO_ROOT = os.path.dirname(
     os.path.dirname(
@@ -48,6 +46,8 @@ sys.path.insert(
     0,
     REPO_ROOT,
 )
+
+from src.models.factory import build_model
 
 from src.config_utils import (
     load_yaml_config,

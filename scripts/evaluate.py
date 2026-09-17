@@ -33,7 +33,6 @@ import sys
 
 import torch
 import torch.nn as nn
-import yaml
 from torch.utils.data import DataLoader
 
 REPO_ROOT = os.path.dirname(

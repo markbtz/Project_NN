@@ -48,6 +48,11 @@ sys.path.insert(
     REPO_ROOT,
 )
 
+from src.config_utils import (
+    load_yaml_config,
+    resolve_project_path,
+)
+
 
 from src.data.dataset import SaliconDataset
 from src.evaluation import evaluate_model
@@ -70,40 +75,6 @@ DEFAULT_EXPERIMENTS_CONFIG = os.path.join(
     "configs",
     "experiments.yaml",
 )
-
-
-def load_yaml_config(path):
-    """
-    Carica un file YAML e verifica che contenga un mapping.
-    """
-
-    with open(
-        path,
-        "r",
-        encoding="utf-8",
-    ) as f:
-        config = yaml.safe_load(f)
-
-    if not isinstance(config, dict):
-        raise ValueError(
-            f"Configurazione YAML non valida: {path}"
-        )
-
-    return config
-
-
-def resolve_repo_path(path):
-    """
-    Rende assoluti i path relativi alla root del repository.
-    """
-
-    if os.path.isabs(path):
-        return path
-
-    return os.path.join(
-        REPO_ROOT,
-        path,
-    )
 
 
 def load_model_for_evaluation(
@@ -498,14 +469,14 @@ def main():
             args.data_dir = colab_cache
 
         else:
-            args.data_dir = resolve_repo_path(
+            args.data_dir = resolve_project_path(
                 data_config[
                     "dataset_root"
                 ]
             )
 
     if args.manifest_path is None:
-        args.manifest_path = resolve_repo_path(
+        args.manifest_path = resolve_project_path(
             data_config[
                 "manifest_path"
             ]
@@ -531,12 +502,12 @@ def main():
         if os.path.isabs(
             args.checkpoint_path
         )
-        else resolve_repo_path(
+        else resolve_project_path(
             args.checkpoint_path
         )
     )
 
-    results_dir = resolve_repo_path(
+    results_dir = resolve_project_path(
         args.results_dir
     )
 

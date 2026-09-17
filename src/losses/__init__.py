@@ -1,9 +1,10 @@
+from src.saliency_maps import normalize_probability_map
+
 from .saliency_losses import (
     cc_kld_loss,
     cc_loss,
     kld_loss,
     mse_loss,
-    normalize_probability_map,
 )
 
 __all__ = [

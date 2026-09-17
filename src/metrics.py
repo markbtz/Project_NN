@@ -1,4 +1,5 @@
 import torch
+from src.saliency_maps import normalize_probability_map
 
 
 def _check_shapes(prediction: torch.Tensor, target: torch.Tensor) -> None:
@@ -84,19 +85,12 @@ def _normalize_distribution(
     Normalizza ogni mappa affinché la somma dei pixel sia 1.
     """
 
-    x = torch.clamp(x, min=0.0)
-
-    x = _flatten_batch(x)
-
-    sums = x.sum(
-        dim=1,
-        keepdim=True,
+    x = normalize_probability_map(
+        x,
+        eps=eps,
     )
 
-    return (x + eps) / (
-        sums + eps * x.shape[1]
-    )
-
+    return _flatten_batch(x)
 
 def cc(
     prediction: torch.Tensor,

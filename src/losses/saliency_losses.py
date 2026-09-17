@@ -21,6 +21,7 @@ For probability-based losses, predictions are normalized internally.
 
 import torch
 import torch.nn.functional as F
+from src.saliency_maps import normalize_probability_map
 
 
 def _check_same_shape(
@@ -32,34 +33,6 @@ def _check_same_shape(
             "prediction e target devono avere la stessa shape: "
             f"{tuple(prediction.shape)} != {tuple(target.shape)}"
         )
-
-
-def normalize_probability_map(
-    x: torch.Tensor,
-    eps: float = 1e-6,
-) -> torch.Tensor:
-    """
-    Converte ogni saliency map in una distribuzione di probabilita'
-    con somma spaziale uguale a 1.
-
-    Shape attesa tipica:
-        (B, 1, H, W)
-
-    La funzione rimane valida anche con dimensioni aggiuntive prima di H/W.
-    """
-    if eps <= 0:
-        raise ValueError("eps deve essere > 0.")
-
-    x = torch.clamp(x, min=0.0)
-    x = x + eps
-
-    denominator = x.sum(
-        dim=(-2, -1),
-        keepdim=True,
-    )
-
-    return x / denominator
-
 
 def mse_loss(
     prediction: torch.Tensor,

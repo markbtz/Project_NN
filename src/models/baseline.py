@@ -17,29 +17,21 @@ import torch.nn.functional as F
 import torchvision
 
 from src.runtime import get_device
+from src.saliency_maps import normalize_probability_map
 
 
-def to_probability_map(x: torch.Tensor, eps: float = 1e-6) -> torch.Tensor:
+def to_probability_map(
+    x: torch.Tensor,
+    eps: float = 1e-6,
+) -> torch.Tensor:
     """
-    Converte una mappa (B, 1, H, W) in una distribuzione di probabilita' a
-    somma 1 su (H, W):
-        P = (P + eps) / sum(P + eps)
-    Stessa formula di configs/data.yaml -> density_map_epsilon, e stessa
-    convenzione di density_map_prob in src/data/dataset.py.
-
-    USARE SOLO in fase di valutazione (CC/SIM/KLD) o per il prior B0/G, MAI
-    come output diretto di un modello allenato con MSE: su immagini di
-    ~50.000 pixel il valore medio per pixel scende a ~2e-5, rendendo la MSE
-    numericamente invisibile e il gradiente troppo piccolo per un training
-    efficace. I modelli restituiscono una mappa "grezza" in [0, 1] (vedi
-    B1Baseline.forward, confrontabile con density_map_raw del dataset); si
-    normalizza a probabilita' solo quando serve per le metriche.
+    Wrapper retrocompatibile per la normalizzazione probabilistica.
     """
-    x = torch.clamp(x, min=0.0)
-    num = x + eps
-    denom = num.sum(dim=(-2, -1), keepdim=True)
-    return num / denom
 
+    return normalize_probability_map(
+        x,
+        eps=eps,
+    )
 
 class CenterPriorB0(nn.Module):
     """

@@ -10,37 +10,13 @@ deve dimostrare un miglioramento.
 Smoke test locale (funziona anche senza dataset reale):
     python src/models/baseline.py
 """
-import random
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision
 
-
-def get_device() -> torch.device:
-    """Seleziona automaticamente cuda (Colab) > mps (M1 Max) > cpu."""
-    if torch.cuda.is_available():
-        return torch.device("cuda")
-    if getattr(torch.backends, "mps", None) is not None and torch.backends.mps.is_available():
-        return torch.device("mps")
-    return torch.device("cpu")
-
-
-def set_seed(seed: int):
-    """
-    Seed globale per riproducibilita' (vedi configs/data.yaml -> seed).
-
-    IMPORTANTE: SaliconDataset usa random.random() (modulo Python standard,
-    non torch) per decidere l'horizontal flip — settare solo
-    torch.manual_seed() NON basta, l'augmentation resterebbe non
-    deterministica. Chiamare questa funzione una sola volta, a inizio script,
-    prima di costruire dataset/dataloader/modello.
-    """
-    random.seed(seed)
-    torch.manual_seed(seed)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(seed)
+from src.runtime import get_device
 
 
 def to_probability_map(x: torch.Tensor, eps: float = 1e-6) -> torch.Tensor:

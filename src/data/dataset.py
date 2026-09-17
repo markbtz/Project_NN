@@ -6,6 +6,7 @@ import torch
 from PIL import Image
 from torch.utils.data import Dataset
 from torchvision.transforms import functional as TF
+from src.saliency_maps import normalize_probability_map
 
 
 IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png"]
@@ -199,15 +200,11 @@ class SaliconDataset(Dataset):
         # Partiamo dalla raw map e la normalizziamo
         # affinché la somma dei pixel sia 1.
         # -------------------------------------------------
-
-        density_map_prob = (
-            density_map_raw + self.eps
+        density_map_prob = normalize_probability_map(
+            density_map_raw,
+            eps=self.eps,
         )
-
-        density_map_prob = (
-            density_map_prob
-            / density_map_prob.sum()
-        )
+        
 
         return (
             density_map_raw,

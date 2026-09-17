@@ -21,7 +21,8 @@ Uso:
     python scripts/train.py --experiment B0
 
 Gli argomenti CLI --epochs, --batch_size, --height, --width,
---data_dir e --manifest_path restano disponibili come override opzionali.
+--data_dir, --manifest_path e --dev_subset restano disponibili
+come override opzionali.
 
 Su Colab, passare --checkpoint_dir sul path di Drive, es.:
     python scripts/train.py --experiment B1 \
@@ -36,7 +37,7 @@ import time
 import torch
 import torch.nn as nn
 import yaml
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 
 
 REPO_ROOT = os.path.dirname(
@@ -300,6 +301,49 @@ def train_b1(args, device):
         density_map_epsilon=args.density_map_epsilon,
         augmentation=True,
     )
+
+    # -----------------------------------------------------
+    # Development subset opzionale
+    #
+    # Quando --dev_subset e' attivo, B1 usa un sottoinsieme
+    # deterministico del training set. La dimensione viene
+    # letta da data.yaml (dev_subset_n_train).
+    #
+    # Usiamo un generatore locale con seed fisso per non
+    # alterare lo stato RNG globale usato da training e
+    # augmentation.
+    # -----------------------------------------------------
+
+    if args.dev_subset:
+        if args.dev_subset_n_train > len(
+            train_dataset
+        ):
+            raise ValueError(
+                "dev_subset_n_train e' maggiore del numero "
+                "di campioni disponibili nel training set."
+            )
+
+        dev_generator = torch.Generator()
+        dev_generator.manual_seed(
+            args.seed
+        )
+
+        dev_indices = torch.randperm(
+            len(train_dataset),
+            generator=dev_generator,
+        )[
+            :args.dev_subset_n_train
+        ].tolist()
+
+        train_dataset = Subset(
+            train_dataset,
+            dev_indices,
+        )
+
+        print(
+            f"[B1] Development subset attivo: "
+            f"{len(train_dataset)} campioni"
+        )
 
     train_loader = DataLoader(
         train_dataset,
@@ -651,6 +695,16 @@ def main():
         ),
     )
 
+    parser.add_argument(
+        "--dev_subset",
+        action="store_true",
+        help=(
+            "Usa il development subset del training set. "
+            "La dimensione e' letta da "
+            "data.yaml -> dev_subset_n_train."
+        ),
+    )
+
     args = parser.parse_args()
 
     # -----------------------------------------------------
@@ -693,6 +747,10 @@ def main():
 
     args.density_map_epsilon = float(
         data_config["density_map_epsilon"]
+    )
+
+    args.dev_subset_n_train = int(
+        data_config["dev_subset_n_train"]
     )
 
     if args.data_dir is None:
@@ -825,6 +883,19 @@ def main():
         )
 
     # -----------------------------------------------------
+    # Protezione del protocollo B0
+    # -----------------------------------------------------
+
+    if (
+        args.experiment == "B0"
+        and args.dev_subset
+    ):
+        raise ValueError(
+            "--dev_subset non e' previsto per B0: "
+            "il center prior va calcolato sul training set completo."
+        )
+
+    # -----------------------------------------------------
     # Riproducibilita' e riepilogo
     # -----------------------------------------------------
 
@@ -897,6 +968,17 @@ def main():
             f"Batch size: "
             f"{args.batch_size}"
         )
+
+        print(
+            f"Development subset: "
+            f"{'yes' if args.dev_subset else 'no'}"
+        )
+
+        if args.dev_subset:
+            print(
+                f"Development subset size: "
+                f"{args.dev_subset_n_train}"
+            )
 
         print(
             f"Epochs: "

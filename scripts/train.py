@@ -38,7 +38,7 @@ import torch
 import torch.nn as nn
 import yaml
 from torch.utils.data import DataLoader, Subset
-
+from src.models.factory import build_model
 
 REPO_ROOT = os.path.dirname(
     os.path.dirname(
@@ -54,11 +54,6 @@ sys.path.insert(
 from src.config_utils import (
     load_yaml_config,
     resolve_project_path,
-)
-
-from src.models.baseline import (
-    B1Baseline,
-    CenterPriorB0,
 )
 
 from src.runtime import (
@@ -239,10 +234,13 @@ def load_checkpoint(
     )
 
 
-def train_b1(args, device):
-    model = B1Baseline(
+def train_b1(args, device, experiment_config):
+    model = build_model(
+        "B1",
+        experiment_config,
+        height=args.height,
+        width=args.width,
         pretrained=args.pretrained,
-        decoder_width=args.decoder_width,
     ).to(device)
 
     if args.optimizer_name != "AdamW":
@@ -539,7 +537,7 @@ def train_b1(args, device):
     )
 
 
-def fit_b0(args, device):
+def fit_b0(args, device, experiment_config):
     """
     B0 non si allena via backprop.
 
@@ -575,9 +573,12 @@ def fit_b0(args, device):
                 args.target_key
             ].to(device)
 
-    model = CenterPriorB0(
+    model = build_model(
+        "B0",
+        experiment_config,
         height=args.height,
         width=args.width,
+        pretrained=False,
     ).to(device)
 
     model.fit_from_loader(
@@ -856,13 +857,6 @@ def main():
             ]
         )
 
-        args.decoder_width = int(
-            experiment_config[
-                "decoder"
-            ][
-                "width"
-            ]
-        )
 
     # -----------------------------------------------------
     # Protezione del protocollo B0
@@ -987,12 +981,14 @@ def main():
         train_b1(
             args,
             device,
+            experiment_config,
         )
 
     else:
         fit_b0(
             args,
             device,
+            experiment_config,
         )
 
 

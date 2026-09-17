@@ -35,6 +35,7 @@ import torch
 import torch.nn as nn
 import yaml
 from torch.utils.data import DataLoader
+from src.models.factory import build_model
 
 
 REPO_ROOT = os.path.dirname(
@@ -56,11 +57,6 @@ from src.config_utils import (
 
 from src.data.dataset import SaliconDataset
 from src.evaluation import evaluate_model
-
-from src.models.baseline import (
-    B1Baseline,
-    CenterPriorB0,
-)
 
 from src.runtime import (
     get_device,
@@ -111,9 +107,12 @@ def load_model_for_evaluation(
     )
 
     if experiment == "B0":
-        model = CenterPriorB0(
+        model = build_model(
+            "B0",
+            experiment_config,
             height=height,
             width=width,
+            pretrained=False,
         ).to(device)
 
         # train.py salva B0 direttamente come state_dict.
@@ -154,19 +153,15 @@ def load_model_for_evaluation(
         )
 
     if experiment == "B1":
-        decoder_width = int(
-            experiment_config[
-                "decoder"
-            ][
-                "width"
-            ]
-        )
-
+        
         # Non serve scaricare nuovamente i pesi ImageNet:
         # il checkpoint contiene gia' tutto il model_state.
-        model = B1Baseline(
+        model = build_model(
+            "B1",
+            experiment_config,
+            height=height,
+            width=width,
             pretrained=False,
-            decoder_width=decoder_width,
         ).to(device)
 
         if (

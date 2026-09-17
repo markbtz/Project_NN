@@ -59,6 +59,7 @@ from src.models.baseline import (
 )
 
 from src.data.dataset import SaliconDataset
+from src.evaluation import evaluate_model
 
 
 DEFAULT_DATA_CONFIG = os.path.join(
@@ -98,12 +99,53 @@ def resolve_repo_path(path):
     )
 
 
+def _initial_best_score(selection_mode):
+    """
+    Valore iniziale per la selezione del best checkpoint.
+    """
+
+    if selection_mode == "max":
+        return float("-inf")
+
+    if selection_mode == "min":
+        return float("inf")
+
+    raise ValueError(
+        "selection_mode deve essere 'max' oppure 'min'."
+    )
+
+
+def _is_better(
+    current_score,
+    best_score,
+    selection_mode,
+):
+    """
+    Confronta lo score corrente con il best score secondo
+    la direzione definita in experiments.yaml.
+    """
+
+    if selection_mode == "max":
+        return current_score > best_score
+
+    if selection_mode == "min":
+        return current_score < best_score
+
+    raise ValueError(
+        "selection_mode deve essere 'max' oppure 'min'."
+    )
+
+
 def save_checkpoint(
     path,
     model,
     optimizer,
     epoch,
-    best_loss,
+    best_score,
+    selection_metric,
+    selection_mode,
+    seed,
+    experiment,
 ):
     os.makedirs(
         os.path.dirname(path),
@@ -119,7 +161,11 @@ def save_checkpoint(
                 if optimizer is not None
                 else None
             ),
-            "best_loss": best_loss,
+            "best_score": best_score,
+            "selection_metric": selection_metric,
+            "selection_mode": selection_mode,
+            "seed": seed,
+            "experiment": experiment,
         },
         path,
     )
@@ -130,24 +176,60 @@ def load_checkpoint(
     model,
     optimizer=None,
     device="cpu",
+    selection_metric="cc",
+    selection_mode="max",
 ):
     """
-    Ritorna (epoca_di_partenza, best_loss).
+    Ritorna (epoca_di_partenza, best_score).
 
-    Se non c'e' checkpoint, riparte da zero.
+    Se non c'e' checkpoint, riparte da zero usando il valore
+    iniziale coerente con selection_mode.
+
+    I vecchi checkpoint basati su best_loss non vengono riutilizzati:
+    la selezione del best model ora avviene sul tuning set e quindi
+    rappresenta un protocollo diverso.
 
     Fondamentale su Colab: una sessione puo'
     disconnettersi in qualunque momento, questo evita
     di ripartire da capo ogni volta.
     """
 
+    initial_best_score = _initial_best_score(
+        selection_mode
+    )
+
     if not os.path.exists(path):
-        return 0, float("inf")
+        return 0, initial_best_score
 
     ckpt = torch.load(
         path,
         map_location=device,
     )
+
+    if "best_score" not in ckpt:
+        raise ValueError(
+            "Checkpoint legacy non compatibile: contiene best_loss "
+            "ma non best_score. Rimuovere o rinominare B1_last.pt "
+            "e ripartire con il nuovo protocollo di validazione."
+        )
+
+    if (
+        ckpt.get("selection_metric")
+        != selection_metric
+    ):
+        raise ValueError(
+            "Il checkpoint usa una selection_metric diversa: "
+            f"{ckpt.get('selection_metric')} != {selection_metric}."
+        )
+
+    if (
+        ckpt.get("selection_mode")
+        != selection_mode
+    ):
+        raise ValueError(
+            "Il checkpoint usa una selection_mode diversa: "
+            f"{ckpt.get('selection_mode')} != {selection_mode}."
+        )
 
     model.load_state_dict(
         ckpt["model_state"]
@@ -164,12 +246,13 @@ def load_checkpoint(
     print(
         f"Checkpoint ripreso da {path} "
         f"(epoca {ckpt['epoch']}, "
-        f"best_loss {ckpt['best_loss']:.4f})"
+        f"best {selection_metric} "
+        f"{ckpt['best_score']:.6f})"
     )
 
     return (
         ckpt["epoch"],
-        ckpt["best_loss"],
+        ckpt["best_score"],
     )
 
 
@@ -225,16 +308,47 @@ def train_b1(args, device):
         num_workers=args.num_workers,
     )
 
+    # -----------------------------------------------------
+    # Tuning set
+    #
+    # Nessuna augmentation: il tuning deve essere stabile
+    # e riproducibile tra epoche ed esperimenti.
+    #
+    # La validation loss di B1 usa density_map_raw (MSE),
+    # mentre CC/SIM/KLD usano density_map_prob.
+    # -----------------------------------------------------
+
+    tuning_dataset = SaliconDataset(
+        data_dir=args.data_dir,
+        manifest_path=args.manifest_path,
+        split=args.validation_split,
+        input_size=(
+            args.width,
+            args.height,
+        ),
+        density_map_epsilon=args.density_map_epsilon,
+        augmentation=False,
+    )
+
+    tuning_loader = DataLoader(
+        tuning_dataset,
+        batch_size=args.batch_size,
+        shuffle=False,
+        num_workers=args.num_workers,
+    )
+
     checkpoint_path = os.path.join(
         args.checkpoint_dir,
         "B1_last.pt",
     )
 
-    start_epoch, best_loss = load_checkpoint(
+    start_epoch, best_score = load_checkpoint(
         checkpoint_path,
         model,
         optimizer,
         device=device,
+        selection_metric=args.selection_metric,
+        selection_mode=args.selection_mode,
     )
 
     for epoch in range(
@@ -283,38 +397,114 @@ def train_b1(args, device):
         print(
             f"[B1] Epoca "
             f"{epoch + 1}/{args.epochs} "
-            f"- loss MSE: "
+            f"- train MSE: "
             f"{epoch_loss:.6e} "
             f"- {time.time() - t0:.1f}s"
         )
 
-        is_best = (
-            epoch_loss < best_loss
+        # -------------------------------------------------
+        # Validazione sul tuning set
+        #
+        # Loss:
+        #   prediction raw vs density_map_raw -> MSE
+        #
+        # Metriche:
+        #   prediction raw vs density_map_prob
+        #   -> CC / SIM / KLD
+        #
+        # evaluate_model usa reduction="none" e aggrega
+        # correttamente per immagine.
+        # -------------------------------------------------
+
+        validation = evaluate_model(
+            model,
+            tuning_loader,
+            device,
+            loss_fn=criterion,
+            loss_target_key=args.target_key,
+            metric_target_key="density_map_prob",
+            eps=args.density_map_epsilon,
+            collect_per_sample=False,
         )
 
-        best_loss = min(
-            epoch_loss,
-            best_loss,
+        validation_summary = validation[
+            "summary"
+        ]
+
+        print(
+            f"[B1] Tuning "
+            f"- MSE: "
+            f"{validation_summary['loss']:.6e} "
+            f"- CC: "
+            f"{validation_summary['cc']:.6f} "
+            f"- SIM: "
+            f"{validation_summary['sim']:.6f} "
+            f"- KLD: "
+            f"{validation_summary['kld']:.6f}"
         )
+
+        if (
+            args.selection_metric
+            not in validation_summary
+        ):
+            raise ValueError(
+                "selection_metric non disponibile nel summary: "
+                f"{args.selection_metric}"
+            )
+
+        current_score = validation_summary[
+            args.selection_metric
+        ]
+
+        if current_score is None:
+            raise ValueError(
+                "La selection_metric scelta non ha un valore: "
+                f"{args.selection_metric}"
+            )
+
+        is_best = _is_better(
+            current_score,
+            best_score,
+            args.selection_mode,
+        )
+
+        if is_best:
+            best_score = current_score
 
         save_checkpoint(
             checkpoint_path,
             model,
             optimizer,
             epoch + 1,
-            best_loss,
+            best_score,
+            args.selection_metric,
+            args.selection_mode,
+            args.seed,
+            args.experiment,
         )
 
         if is_best:
+            best_checkpoint_path = os.path.join(
+                args.checkpoint_dir,
+                "B1_best.pt",
+            )
+
             save_checkpoint(
-                os.path.join(
-                    args.checkpoint_dir,
-                    "B1_best.pt",
-                ),
+                best_checkpoint_path,
                 model,
                 optimizer,
                 epoch + 1,
-                best_loss,
+                best_score,
+                args.selection_metric,
+                args.selection_mode,
+                args.seed,
+                args.experiment,
+            )
+
+            print(
+                f"[B1] Nuovo best checkpoint "
+                f"- {args.selection_metric}: "
+                f"{best_score:.6f}"
             )
 
     print(
@@ -533,6 +723,37 @@ def main():
         "train_split"
     ]
 
+    args.validation_split = training_config[
+        "validation_split"
+    ]
+
+    args.selection_metric = training_config[
+        "selection_metric"
+    ]
+
+    args.selection_mode = training_config[
+        "selection_mode"
+    ]
+
+    if args.selection_mode not in (
+        "max",
+        "min",
+    ):
+        raise ValueError(
+            "selection_mode deve essere 'max' oppure 'min'."
+        )
+
+    if args.selection_metric not in (
+        "loss",
+        "cc",
+        "sim",
+        "kld",
+    ):
+        raise ValueError(
+            "selection_metric deve essere una tra: "
+            "loss, cc, sim, kld."
+        )
+
     args.num_workers = int(
         training_config.get(
             "num_workers",
@@ -685,6 +906,17 @@ def main():
         print(
             f"Loss: "
             f"{args.loss_name}"
+        )
+
+        print(
+            f"Validation split: "
+            f"{args.validation_split}"
+        )
+
+        print(
+            f"Checkpoint selection: "
+            f"{args.selection_metric} "
+            f"({args.selection_mode})"
         )
 
     if args.experiment == "B1":

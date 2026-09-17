@@ -14,9 +14,9 @@
 # non viene implementata e selezionata sul tuning set. M1-L/G/M2 non
 # devono essere lanciati finche' questi valori non vengono definiti.
 #
-# I valori di B1 sotto mantengono il comportamento attuale di train.py:
-# AdamW, lr=1e-4, weight_decay=1e-4, batch_size=8, epochs=3.
-# In questo modo spostiamo gli hardcode nel YAML senza cambiare il training.
+# B1 mantiene AdamW, lr=1e-4, weight_decay=1e-4, batch_size=8, epochs=3.
+# Il best checkpoint dei modelli trainabili viene selezionato sul tuning set
+# con una regola comune definita da selection_metric / selection_mode.
 
 training:
   train_split: "train"
@@ -25,6 +25,11 @@ training:
   batch_size: 8
   epochs: 3
   num_workers: 0
+
+  # Regola comune per scegliere il best checkpoint sul tuning set.
+  # CC: piu' alto e' meglio.
+  selection_metric: "cc"
+  selection_mode: "max"
 
   optimizer:
     name: "AdamW"

@@ -39,6 +39,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, Subset
 
 
+
 REPO_ROOT = os.path.dirname(
     os.path.dirname(
         os.path.abspath(__file__)
@@ -48,6 +49,11 @@ REPO_ROOT = os.path.dirname(
 sys.path.insert(
     0,
     REPO_ROOT,
+)
+
+from src.training_monitoring import (
+    EarlyStopping,
+    TrainingHistory,
 )
 
 from src.checkpoints import (
@@ -225,6 +231,38 @@ def train_b1(args, device, experiment_config):
         selection_mode=args.selection_mode,
     )
 
+    early_stopping = EarlyStopping(
+        enabled=args.early_stopping_enabled,
+        patience=args.early_stopping_patience,
+    )
+
+    early_stopping = EarlyStopping(
+    enabled=args.early_stopping_enabled,
+    patience=args.early_stopping_patience,
+)
+
+    history = TrainingHistory()
+
+    history_path = os.path.join(
+        args.checkpoint_dir,
+        "B1_training_history.csv",
+    )
+
+    loss_plot_path = os.path.join(
+        args.checkpoint_dir,
+        "B1_training_loss.png",
+    )
+
+    history.load_csv(
+        history_path
+    )
+
+    early_stopping.epochs_without_improvement = (
+        history.consecutive_non_improving_epochs(
+            args.selection_mode
+        )
+    )
+
     for epoch in range(
         start_epoch,
         args.epochs,
@@ -336,6 +374,22 @@ def train_b1(args, device, experiment_config):
                 f"{args.selection_metric}"
             )
 
+        history.add_epoch(
+            epoch=epoch + 1,
+            train_loss=epoch_loss,
+            validation_loss=validation_summary["loss"],
+            selection_metric=args.selection_metric,
+            selection_value=current_score,
+        )
+
+        history.save_csv(
+            history_path
+        )
+
+        history.save_loss_plot(
+            loss_plot_path
+        )
+
         is_best = is_better(
             current_score,
             best_score,
@@ -380,6 +434,18 @@ def train_b1(args, device, experiment_config):
                 f"- {args.selection_metric}: "
                 f"{best_score:.6f}"
             )
+
+        should_stop = early_stopping.step(
+        improved=is_best,
+        )
+
+        if should_stop:
+            print(
+                f"[B1] Early stopping dopo "
+                f"{early_stopping.epochs_without_improvement} "
+                f"epoche senza miglioramento."
+            )
+            break
 
     print(
         "Training B1 completato. "
@@ -652,6 +718,25 @@ def main():
         )
     )
 
+    early_stopping_config = training_config.get(
+    "early_stopping",
+    {},
+    )
+
+    args.early_stopping_enabled = bool(
+        early_stopping_config.get(
+            "enabled",
+            False,
+        )
+    )
+
+    args.early_stopping_patience = int(
+        early_stopping_config.get(
+            "patience",
+            5,
+        )
+    )
+
     if args.batch_size is None:
         args.batch_size = int(
             training_config["batch_size"]
@@ -809,6 +894,16 @@ def main():
         print(
             f"Epochs: "
             f"{args.epochs}"
+        )
+
+        print(
+            f"Early stopping: "
+            f"{'yes' if args.early_stopping_enabled else 'no'}"
+        )
+
+        print(
+            f"Early stopping patience: "
+            f"{args.early_stopping_patience}"
         )
 
         print(

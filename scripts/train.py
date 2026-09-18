@@ -63,6 +63,7 @@ from src.checkpoints import (
 )
 
 from src.models.factory import build_model
+from src.models.multiscale import M1MultiScale
 
 from src.config_utils import (
     load_yaml_config,
@@ -90,18 +91,40 @@ DEFAULT_EXPERIMENTS_CONFIG = os.path.join(
     "experiments.yaml",
 )
 
-def train_b1(args, device, experiment_config):
-    model = build_model(
-        "B1",
-        experiment_config,
-        height=args.height,
-        width=args.width,
-        pretrained=args.pretrained,
-    ).to(device)
+def train_mse_model(args, device, experiment_config):
+    if args.experiment == "B1":
+        model = build_model(
+            "B1",
+            experiment_config,
+            height=args.height,
+            width=args.width,
+            pretrained=args.pretrained,
+        ).to(device)
+
+    elif args.experiment == "M1":
+        decoder_width = int(
+            experiment_config.get(
+                "decoder",
+                {},
+            ).get(
+                "width",
+                96,
+            )
+        )
+
+        model = M1MultiScale(
+            pretrained=args.pretrained,
+            decoder_width=decoder_width,
+        ).to(device)
+
+    else:
+        raise ValueError(
+            f"Esperimento non supportato: {args.experiment}"
+        )
 
     if args.optimizer_name != "AdamW":
         raise ValueError(
-            "B1 supporta attualmente solo optimizer AdamW, "
+            f"{args.experiment} supporta attualmente solo optimizer AdamW, "
             f"ma experiments.yaml contiene: {args.optimizer_name}"
         )
 
@@ -113,7 +136,7 @@ def train_b1(args, device, experiment_config):
 
     if args.loss_name != "mse":
         raise ValueError(
-            "B1 supporta attualmente solo loss MSE, "
+            f"{args.experiment} supporta attualmente solo loss MSE, "
             f"ma experiments.yaml contiene: {args.loss_name}"
         )
 
@@ -177,7 +200,7 @@ def train_b1(args, device, experiment_config):
         )
 
         print(
-            f"[B1] Development subset attivo: "
+            f"[{args.experiment}] Development subset attivo: "
             f"{len(train_dataset)} campioni"
         )
 
@@ -219,7 +242,7 @@ def train_b1(args, device, experiment_config):
 
     checkpoint_path = os.path.join(
         args.checkpoint_dir,
-        "B1_last.pt",
+        f"{args.experiment}_last.pt",
     )
 
     start_epoch, best_score = load_training_checkpoint(
@@ -245,12 +268,12 @@ def train_b1(args, device, experiment_config):
 
     history_path = os.path.join(
         args.checkpoint_dir,
-        "B1_training_history.csv",
+        f"{args.experiment}_training_history.csv",
     )
 
     loss_plot_path = os.path.join(
         args.checkpoint_dir,
-        "B1_training_loss.png",
+        f"{args.experiment}_training_loss.png",
     )
 
     history.load_csv(
@@ -307,7 +330,7 @@ def train_b1(args, device, experiment_config):
         )
 
         print(
-            f"[B1] Epoca "
+            f"[{args.experiment}] Epoca "
             f"{epoch + 1}/{args.epochs} "
             f"- train MSE: "
             f"{epoch_loss:.6e} "
@@ -344,7 +367,7 @@ def train_b1(args, device, experiment_config):
         ]
 
         print(
-            f"[B1] Tuning "
+            f"[{args.experiment}] Tuning "
             f"- MSE: "
             f"{validation_summary['loss']:.6e} "
             f"- CC: "
@@ -414,7 +437,7 @@ def train_b1(args, device, experiment_config):
         if is_best:
             best_checkpoint_path = os.path.join(
                 args.checkpoint_dir,
-                "B1_best.pt",
+                f"{args.experiment}_best.pt",
             )
 
             save_training_checkpoint(
@@ -430,7 +453,7 @@ def train_b1(args, device, experiment_config):
             )
 
             print(
-                f"[B1] Nuovo best checkpoint "
+                f"[{args.experiment}] Nuovo best checkpoint "
                 f"- {args.selection_metric}: "
                 f"{best_score:.6f}"
             )
@@ -441,14 +464,14 @@ def train_b1(args, device, experiment_config):
 
         if should_stop:
             print(
-                f"[B1] Early stopping dopo "
+                f"[{args.experiment}] Early stopping dopo "
                 f"{early_stopping.epochs_without_improvement} "
                 f"epoche senza miglioramento."
             )
             break
 
     print(
-        "Training B1 completato. "
+        f"Training {args.experiment} completato. "
         f"Checkpoint in: {args.checkpoint_dir}"
     )
 
@@ -529,7 +552,7 @@ def main():
 
     parser.add_argument(
         "--experiment",
-        choices=["B0", "B1"],
+        choices=["B0", "B1", "M1"],
         required=True,
     )
 
@@ -783,7 +806,7 @@ def main():
         "name"
     ]
 
-    if args.experiment == "B1":
+    if args.experiment in ("B1", "M1"):
         args.pretrained = bool(
             experiment_config[
                 "encoder"
@@ -859,7 +882,7 @@ def main():
         f"Target: {args.target_key}"
     )
 
-    if args.experiment == "B1":
+    if args.experiment in ("B1", "M1"):
         print(
             f"Optimizer: "
             f"{args.optimizer_name}"
@@ -922,8 +945,8 @@ def main():
             f"({args.selection_mode})"
         )
 
-    if args.experiment == "B1":
-        train_b1(
+    if args.experiment in ("B1", "M1"):
+        train_mse_model(
             args,
             device,
             experiment_config,

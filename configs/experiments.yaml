@@ -87,6 +87,10 @@ experiments:
       - "C4"
       - "C5"
 
+    decoder:
+      name: "multiscale"
+      width: 96
+
     # Stessa target/loss di B1 per isolare l'effetto architetturale.
     target: "density_map_raw"
 

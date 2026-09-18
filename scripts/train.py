@@ -59,6 +59,8 @@ from src.models.baseline import (
     set_seed,
 )
 
+from src.models.multiscale import M1MultiScale
+
 from src.data.dataset import SaliconDataset
 from src.evaluation import evaluate_model
 
@@ -257,15 +259,28 @@ def load_checkpoint(
     )
 
 
-def train_b1(args, device):
-    model = B1Baseline(
-        pretrained=args.pretrained,
-        decoder_width=args.decoder_width,
-    ).to(device)
+def train_mse_model(args, device):
+
+    if args.experiment == "B1":
+        model = B1Baseline(
+            pretrained=args.pretrained,
+            decoder_width=args.decoder_width,
+        ).to(device)
+
+    elif args.experiment == "M1":
+        model = M1MultiScale(
+            pretrained=args.pretrained,
+            decoder_width=args.decoder_width,
+        ).to(device)
+
+    else:
+        raise ValueError(
+            f"Esperimento non supportato: {args.experiment}"
+        )
 
     if args.optimizer_name != "AdamW":
         raise ValueError(
-            "B1 supporta attualmente solo optimizer AdamW, "
+            f"{args.experiment} supporta attualmente solo optimizer AdamW, "
             f"ma experiments.yaml contiene: {args.optimizer_name}"
         )
 
@@ -277,7 +292,7 @@ def train_b1(args, device):
 
     if args.loss_name != "mse":
         raise ValueError(
-            "B1 supporta attualmente solo loss MSE, "
+            f"{args.experiment} supporta attualmente solo loss MSE, "
             f"ma experiments.yaml contiene: {args.loss_name}"
         )
 
@@ -341,7 +356,7 @@ def train_b1(args, device):
         )
 
         print(
-            f"[B1] Development subset attivo: "
+            f"[{args.experiment}] Development subset attivo: "
             f"{len(train_dataset)} campioni"
         )
 
@@ -383,7 +398,7 @@ def train_b1(args, device):
 
     checkpoint_path = os.path.join(
         args.checkpoint_dir,
-        "B1_last.pt",
+        f"{args.experiment}_last.pt",
     )
 
     start_epoch, best_score = load_checkpoint(
@@ -439,7 +454,7 @@ def train_b1(args, device):
         )
 
         print(
-            f"[B1] Epoca "
+            f"[{args.experiment}] Epoca "
             f"{epoch + 1}/{args.epochs} "
             f"- train MSE: "
             f"{epoch_loss:.6e} "
@@ -476,7 +491,7 @@ def train_b1(args, device):
         ]
 
         print(
-            f"[B1] Tuning "
+            f"[{args.experiment}] Tuning "
             f"- MSE: "
             f"{validation_summary['loss']:.6e} "
             f"- CC: "
@@ -530,7 +545,8 @@ def train_b1(args, device):
         if is_best:
             best_checkpoint_path = os.path.join(
                 args.checkpoint_dir,
-                "B1_best.pt",
+                f"{args.experiment}_best.pt",
+                
             )
 
             save_checkpoint(
@@ -546,13 +562,13 @@ def train_b1(args, device):
             )
 
             print(
-                f"[B1] Nuovo best checkpoint "
+                f"[{args.experiment}] Nuovo best checkpoint "
                 f"- {args.selection_metric}: "
                 f"{best_score:.6f}"
             )
 
     print(
-        "Training B1 completato. "
+        f"Training {args.experiment} completato. "
         f"Checkpoint in: {args.checkpoint_dir}"
     )
 
@@ -630,7 +646,7 @@ def main():
 
     parser.add_argument(
         "--experiment",
-        choices=["B0", "B1"],
+        choices=["B0", "B1", "M1"],
         required=True,
     )
 
@@ -865,7 +881,7 @@ def main():
         "name"
     ]
 
-    if args.experiment == "B1":
+    if args.experiment in ("B1", "M1"):
         args.pretrained = bool(
             experiment_config[
                 "encoder"
@@ -948,7 +964,7 @@ def main():
         f"Target: {args.target_key}"
     )
 
-    if args.experiment == "B1":
+    if args.experiment in ("B1", "M1"):
         print(
             f"Optimizer: "
             f"{args.optimizer_name}"
@@ -1001,8 +1017,8 @@ def main():
             f"({args.selection_mode})"
         )
 
-    if args.experiment == "B1":
-        train_b1(
+    if args.experiment in ("B1", "M1"):
+        train_mse_model(
             args,
             device,
         )

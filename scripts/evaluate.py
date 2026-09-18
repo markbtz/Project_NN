@@ -33,9 +33,7 @@ import sys
 
 import torch
 import torch.nn as nn
-import yaml
 from torch.utils.data import DataLoader
-
 
 REPO_ROOT = os.path.dirname(
     os.path.dirname(
@@ -48,12 +46,18 @@ sys.path.insert(
     REPO_ROOT,
 )
 
+from src.models.factory import build_model
+
+from src.config_utils import (
+    load_yaml_config,
+    resolve_project_path,
+)
+
 
 from src.data.dataset import SaliconDataset
 from src.evaluation import evaluate_model
-from src.models.baseline import (
-    B1Baseline,
-    CenterPriorB0,
+
+from src.runtime import (
     get_device,
     set_seed,
 )
@@ -70,40 +74,6 @@ DEFAULT_EXPERIMENTS_CONFIG = os.path.join(
     "configs",
     "experiments.yaml",
 )
-
-
-def load_yaml_config(path):
-    """
-    Carica un file YAML e verifica che contenga un mapping.
-    """
-
-    with open(
-        path,
-        "r",
-        encoding="utf-8",
-    ) as f:
-        config = yaml.safe_load(f)
-
-    if not isinstance(config, dict):
-        raise ValueError(
-            f"Configurazione YAML non valida: {path}"
-        )
-
-    return config
-
-
-def resolve_repo_path(path):
-    """
-    Rende assoluti i path relativi alla root del repository.
-    """
-
-    if os.path.isabs(path):
-        return path
-
-    return os.path.join(
-        REPO_ROOT,
-        path,
-    )
 
 
 def load_model_for_evaluation(
@@ -136,9 +106,12 @@ def load_model_for_evaluation(
     )
 
     if experiment == "B0":
-        model = CenterPriorB0(
+        model = build_model(
+            "B0",
+            experiment_config,
             height=height,
             width=width,
+            pretrained=False,
         ).to(device)
 
         # train.py salva B0 direttamente come state_dict.
@@ -179,19 +152,15 @@ def load_model_for_evaluation(
         )
 
     if experiment == "B1":
-        decoder_width = int(
-            experiment_config[
-                "decoder"
-            ][
-                "width"
-            ]
-        )
-
+        
         # Non serve scaricare nuovamente i pesi ImageNet:
         # il checkpoint contiene gia' tutto il model_state.
-        model = B1Baseline(
+        model = build_model(
+            "B1",
+            experiment_config,
+            height=height,
+            width=width,
             pretrained=False,
-            decoder_width=decoder_width,
         ).to(device)
 
         if (
@@ -498,14 +467,14 @@ def main():
             args.data_dir = colab_cache
 
         else:
-            args.data_dir = resolve_repo_path(
+            args.data_dir = resolve_project_path(
                 data_config[
                     "dataset_root"
                 ]
             )
 
     if args.manifest_path is None:
-        args.manifest_path = resolve_repo_path(
+        args.manifest_path = resolve_project_path(
             data_config[
                 "manifest_path"
             ]
@@ -531,12 +500,12 @@ def main():
         if os.path.isabs(
             args.checkpoint_path
         )
-        else resolve_repo_path(
+        else resolve_project_path(
             args.checkpoint_path
         )
     )
 
-    results_dir = resolve_repo_path(
+    results_dir = resolve_project_path(
         args.results_dir
     )
 

@@ -36,8 +36,8 @@ import time
 
 import torch
 import torch.nn as nn
-import yaml
 from torch.utils.data import DataLoader, Subset
+
 
 
 REPO_ROOT = os.path.dirname(
@@ -51,15 +51,29 @@ sys.path.insert(
     REPO_ROOT,
 )
 
+from src.training_monitoring import (
+    EarlyStopping,
+    TrainingHistory,
+)
 
-from src.models.baseline import (
-    B1Baseline,
-    CenterPriorB0,
+from src.checkpoints import (
+    is_better,
+    load_training_checkpoint,
+    save_training_checkpoint,
+)
+
+from src.models.factory import build_model
+from src.models.multiscale import M1MultiScale
+
+from src.config_utils import (
+    load_yaml_config,
+    resolve_project_path,
+)
+
+from src.runtime import (
     get_device,
     set_seed,
 )
-
-from src.models.multiscale import M1MultiScale
 
 from src.data.dataset import SaliconDataset
 from src.evaluation import evaluate_model
@@ -77,200 +91,30 @@ DEFAULT_EXPERIMENTS_CONFIG = os.path.join(
     "experiments.yaml",
 )
 
-
-def load_yaml_config(path):
-    """Carica un file YAML e verifica che contenga un mapping."""
-    with open(path, "r", encoding="utf-8") as f:
-        config = yaml.safe_load(f)
-
-    if not isinstance(config, dict):
-        raise ValueError(
-            f"Configurazione YAML non valida: {path}"
-        )
-
-    return config
-
-
-def resolve_repo_path(path):
-    """Rende assoluti i path relativi alla root del repository."""
-    if os.path.isabs(path):
-        return path
-
-    return os.path.join(
-        REPO_ROOT,
-        path,
-    )
-
-
-def _initial_best_score(selection_mode):
-    """
-    Valore iniziale per la selezione del best checkpoint.
-    """
-
-    if selection_mode == "max":
-        return float("-inf")
-
-    if selection_mode == "min":
-        return float("inf")
-
-    raise ValueError(
-        "selection_mode deve essere 'max' oppure 'min'."
-    )
-
-
-def _is_better(
-    current_score,
-    best_score,
-    selection_mode,
-):
-    """
-    Confronta lo score corrente con il best score secondo
-    la direzione definita in experiments.yaml.
-    """
-
-    if selection_mode == "max":
-        return current_score > best_score
-
-    if selection_mode == "min":
-        return current_score < best_score
-
-    raise ValueError(
-        "selection_mode deve essere 'max' oppure 'min'."
-    )
-
-
-def save_checkpoint(
-    path,
-    model,
-    optimizer,
-    epoch,
-    best_score,
-    selection_metric,
-    selection_mode,
-    seed,
-    experiment,
-):
-    os.makedirs(
-        os.path.dirname(path),
-        exist_ok=True,
-    )
-
-    torch.save(
-        {
-            "epoch": epoch,
-            "model_state": model.state_dict(),
-            "optimizer_state": (
-                optimizer.state_dict()
-                if optimizer is not None
-                else None
-            ),
-            "best_score": best_score,
-            "selection_metric": selection_metric,
-            "selection_mode": selection_mode,
-            "seed": seed,
-            "experiment": experiment,
-        },
-        path,
-    )
-
-
-def load_checkpoint(
-    path,
-    model,
-    optimizer=None,
-    device="cpu",
-    selection_metric="cc",
-    selection_mode="max",
-):
-    """
-    Ritorna (epoca_di_partenza, best_score).
-
-    Se non c'e' checkpoint, riparte da zero usando il valore
-    iniziale coerente con selection_mode.
-
-    I vecchi checkpoint basati su best_loss non vengono riutilizzati:
-    la selezione del best model ora avviene sul tuning set e quindi
-    rappresenta un protocollo diverso.
-
-    Fondamentale su Colab: una sessione puo'
-    disconnettersi in qualunque momento, questo evita
-    di ripartire da capo ogni volta.
-    """
-
-    initial_best_score = _initial_best_score(
-        selection_mode
-    )
-
-    if not os.path.exists(path):
-        return 0, initial_best_score
-
-    ckpt = torch.load(
-        path,
-        map_location=device,
-    )
-
-    if "best_score" not in ckpt:
-        raise ValueError(
-            "Checkpoint legacy non compatibile: contiene best_loss "
-            "ma non best_score. Rimuovere o rinominare B1_last.pt "
-            "e ripartire con il nuovo protocollo di validazione."
-        )
-
-    if (
-        ckpt.get("selection_metric")
-        != selection_metric
-    ):
-        raise ValueError(
-            "Il checkpoint usa una selection_metric diversa: "
-            f"{ckpt.get('selection_metric')} != {selection_metric}."
-        )
-
-    if (
-        ckpt.get("selection_mode")
-        != selection_mode
-    ):
-        raise ValueError(
-            "Il checkpoint usa una selection_mode diversa: "
-            f"{ckpt.get('selection_mode')} != {selection_mode}."
-        )
-
-    model.load_state_dict(
-        ckpt["model_state"]
-    )
-
-    if (
-        optimizer is not None
-        and ckpt.get("optimizer_state") is not None
-    ):
-        optimizer.load_state_dict(
-            ckpt["optimizer_state"]
-        )
-
-    print(
-        f"Checkpoint ripreso da {path} "
-        f"(epoca {ckpt['epoch']}, "
-        f"best {selection_metric} "
-        f"{ckpt['best_score']:.6f})"
-    )
-
-    return (
-        ckpt["epoch"],
-        ckpt["best_score"],
-    )
-
-
-def train_mse_model(args, device):
-
+def train_mse_model(args, device, experiment_config):
     if args.experiment == "B1":
-        model = B1Baseline(
+        model = build_model(
+            "B1",
+            experiment_config,
+            height=args.height,
+            width=args.width,
             pretrained=args.pretrained,
-            decoder_width=args.decoder_width,
         ).to(device)
 
     elif args.experiment == "M1":
+        decoder_width = int(
+            experiment_config.get(
+                "decoder",
+                {},
+            ).get(
+                "width",
+                96,
+            )
+        )
+
         model = M1MultiScale(
             pretrained=args.pretrained,
-            decoder_width=args.decoder_width,
+            decoder_width=decoder_width,
         ).to(device)
 
     else:
@@ -401,13 +245,45 @@ def train_mse_model(args, device):
         f"{args.experiment}_last.pt",
     )
 
-    start_epoch, best_score = load_checkpoint(
+    start_epoch, best_score = load_training_checkpoint(
         checkpoint_path,
         model,
         optimizer,
         device=device,
         selection_metric=args.selection_metric,
         selection_mode=args.selection_mode,
+    )
+
+    early_stopping = EarlyStopping(
+        enabled=args.early_stopping_enabled,
+        patience=args.early_stopping_patience,
+    )
+
+    early_stopping = EarlyStopping(
+    enabled=args.early_stopping_enabled,
+    patience=args.early_stopping_patience,
+)
+
+    history = TrainingHistory()
+
+    history_path = os.path.join(
+        args.checkpoint_dir,
+        f"{args.experiment}_training_history.csv",
+    )
+
+    loss_plot_path = os.path.join(
+        args.checkpoint_dir,
+        f"{args.experiment}_training_loss.png",
+    )
+
+    history.load_csv(
+        history_path
+    )
+
+    early_stopping.epochs_without_improvement = (
+        history.consecutive_non_improving_epochs(
+            args.selection_mode
+        )
     )
 
     for epoch in range(
@@ -521,7 +397,23 @@ def train_mse_model(args, device):
                 f"{args.selection_metric}"
             )
 
-        is_best = _is_better(
+        history.add_epoch(
+            epoch=epoch + 1,
+            train_loss=epoch_loss,
+            validation_loss=validation_summary["loss"],
+            selection_metric=args.selection_metric,
+            selection_value=current_score,
+        )
+
+        history.save_csv(
+            history_path
+        )
+
+        history.save_loss_plot(
+            loss_plot_path
+        )
+
+        is_best = is_better(
             current_score,
             best_score,
             args.selection_mode,
@@ -530,7 +422,7 @@ def train_mse_model(args, device):
         if is_best:
             best_score = current_score
 
-        save_checkpoint(
+        save_training_checkpoint(
             checkpoint_path,
             model,
             optimizer,
@@ -546,10 +438,9 @@ def train_mse_model(args, device):
             best_checkpoint_path = os.path.join(
                 args.checkpoint_dir,
                 f"{args.experiment}_best.pt",
-                
             )
 
-            save_checkpoint(
+            save_training_checkpoint(
                 best_checkpoint_path,
                 model,
                 optimizer,
@@ -567,13 +458,25 @@ def train_mse_model(args, device):
                 f"{best_score:.6f}"
             )
 
+        should_stop = early_stopping.step(
+        improved=is_best,
+        )
+
+        if should_stop:
+            print(
+                f"[{args.experiment}] Early stopping dopo "
+                f"{early_stopping.epochs_without_improvement} "
+                f"epoche senza miglioramento."
+            )
+            break
+
     print(
         f"Training {args.experiment} completato. "
         f"Checkpoint in: {args.checkpoint_dir}"
     )
 
 
-def fit_b0(args, device):
+def fit_b0(args, device, experiment_config):
     """
     B0 non si allena via backprop.
 
@@ -609,9 +512,12 @@ def fit_b0(args, device):
                 args.target_key
             ].to(device)
 
-    model = CenterPriorB0(
+    model = build_model(
+        "B0",
+        experiment_config,
         height=args.height,
         width=args.width,
+        pretrained=False,
     ).to(device)
 
     model.fit_from_loader(
@@ -780,12 +686,12 @@ def main():
         ):
             args.data_dir = colab_cache
         else:
-            args.data_dir = resolve_repo_path(
+            args.data_dir = resolve_project_path(
                 data_config["dataset_root"]
             )
 
     if args.manifest_path is None:
-        args.manifest_path = resolve_repo_path(
+        args.manifest_path = resolve_project_path(
             data_config["manifest_path"]
         )
 
@@ -832,6 +738,25 @@ def main():
         training_config.get(
             "num_workers",
             0,
+        )
+    )
+
+    early_stopping_config = training_config.get(
+    "early_stopping",
+    {},
+    )
+
+    args.early_stopping_enabled = bool(
+        early_stopping_config.get(
+            "enabled",
+            False,
+        )
+    )
+
+    args.early_stopping_patience = int(
+        early_stopping_config.get(
+            "patience",
+            5,
         )
     )
 
@@ -890,13 +815,6 @@ def main():
             ]
         )
 
-        args.decoder_width = int(
-            experiment_config[
-                "decoder"
-            ][
-                "width"
-            ]
-        )
 
     # -----------------------------------------------------
     # Protezione del protocollo B0
@@ -1002,6 +920,16 @@ def main():
         )
 
         print(
+            f"Early stopping: "
+            f"{'yes' if args.early_stopping_enabled else 'no'}"
+        )
+
+        print(
+            f"Early stopping patience: "
+            f"{args.early_stopping_patience}"
+        )
+
+        print(
             f"Loss: "
             f"{args.loss_name}"
         )
@@ -1021,12 +949,14 @@ def main():
         train_mse_model(
             args,
             device,
+            experiment_config,
         )
 
     else:
         fit_b0(
             args,
             device,
+            experiment_config,
         )
 
 

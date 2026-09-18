@@ -38,10 +38,6 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, Subset
 
-from src.training_monitoring import (
-    EarlyStopping,
-    TrainingHistory,
-)
 
 
 REPO_ROOT = os.path.dirname(
@@ -53,6 +49,11 @@ REPO_ROOT = os.path.dirname(
 sys.path.insert(
     0,
     REPO_ROOT,
+)
+
+from src.training_monitoring import (
+    EarlyStopping,
+    TrainingHistory,
 )
 
 from src.checkpoints import (

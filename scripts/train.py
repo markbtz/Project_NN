@@ -257,6 +257,12 @@ def train_b1(args, device, experiment_config):
         history_path
     )
 
+    early_stopping.epochs_without_improvement = (
+        history.consecutive_non_improving_epochs(
+            args.selection_mode
+        )
+    )
+
     for epoch in range(
         start_epoch,
         args.epochs,

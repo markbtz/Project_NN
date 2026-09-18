@@ -211,3 +211,47 @@ class TrainingHistory:
             dpi=150,
         )
         plt.close()
+
+    def consecutive_non_improving_epochs(
+        self,
+        selection_mode: str,
+    ) -> int:
+        """   Conta le epoche consecutive senza miglioramento alla fine della training history.
+        """
+
+        if not self.records:
+            return 0
+
+        if selection_mode not in (
+            "max",
+            "min",
+        ):
+            raise ValueError(
+                "selection_mode deve essere 'max' oppure 'min'."
+            )
+
+        best_score = None
+        epochs_without_improvement = 0
+
+        for record in self.records:
+            current_score = record[
+                "selection_value"
+            ]
+
+            if best_score is None:
+                best_score = current_score
+                epochs_without_improvement = 0
+                continue
+
+            if selection_mode == "max":
+                improved = current_score > best_score
+            else:
+                improved = current_score < best_score
+
+            if improved:
+                best_score = current_score
+                epochs_without_improvement = 0
+            else:
+                epochs_without_improvement += 1
+
+        return epochs_without_improvement

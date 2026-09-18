@@ -193,3 +193,134 @@ def test_training_history_saves_loss_plot(tmp_path):
 
     assert plot_path.exists()
     assert plot_path.stat().st_size > 0
+
+def test_training_history_counts_non_improving_epochs_max():
+    history = TrainingHistory()
+
+    values = [
+        0.84,
+        0.86,
+        0.85,
+        0.84,
+        0.83,
+    ]
+
+    for epoch, value in enumerate(
+        values,
+        start=1,
+    ):
+        history.add_epoch(
+            epoch=epoch,
+            train_loss=0.0,
+            validation_loss=0.0,
+            selection_metric="cc",
+            selection_value=value,
+        )
+
+    assert (
+        history.consecutive_non_improving_epochs(
+            "max"
+        )
+        == 3
+    )
+
+
+def test_training_history_resets_non_improving_count():
+    history = TrainingHistory()
+
+    values = [
+        0.84,
+        0.83,
+        0.82,
+        0.87,
+    ]
+
+    for epoch, value in enumerate(
+        values,
+        start=1,
+    ):
+        history.add_epoch(
+            epoch=epoch,
+            train_loss=0.0,
+            validation_loss=0.0,
+            selection_metric="cc",
+            selection_value=value,
+        )
+
+    assert (
+        history.consecutive_non_improving_epochs(
+            "max"
+        )
+        == 0
+    )
+
+
+def test_training_history_counts_non_improving_epochs_min():
+    history = TrainingHistory()
+
+    values = [
+        0.40,
+        0.30,
+        0.31,
+        0.32,
+    ]
+
+    for epoch, value in enumerate(
+        values,
+        start=1,
+    ):
+        history.add_epoch(
+            epoch=epoch,
+            train_loss=0.0,
+            validation_loss=0.0,
+            selection_metric="kld",
+            selection_value=value,
+        )
+
+    assert (
+        history.consecutive_non_improving_epochs(
+            "min"
+        )
+        == 2
+    )
+
+def test_early_stopping_resumes_from_history():
+    history = TrainingHistory()
+
+    values = [
+        0.84,
+        0.83,
+        0.82,
+    ]
+
+    for epoch, value in enumerate(
+        values,
+        start=1,
+    ):
+        history.add_epoch(
+            epoch=epoch,
+            train_loss=0.0,
+            validation_loss=0.0,
+            selection_metric="cc",
+            selection_value=value,
+        )
+
+    early_stopping = EarlyStopping(
+        enabled=True,
+        patience=3,
+    )
+
+    early_stopping.epochs_without_improvement = (
+        history.consecutive_non_improving_epochs(
+            "max"
+        )
+    )
+
+    assert (
+        early_stopping.epochs_without_improvement
+        == 2
+    )
+
+    assert early_stopping.step(
+        improved=False
+    )

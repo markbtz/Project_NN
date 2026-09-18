@@ -26,6 +26,10 @@ training:
   epochs: 3
   num_workers: 0
 
+  early_stopping:
+  enabled: true
+  patience: 5
+
   # Regola comune per scegliere il best checkpoint sul tuning set.
   # CC: piu' alto e' meglio.
   selection_metric: "cc"

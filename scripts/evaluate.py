@@ -1,5 +1,5 @@
 """
-Evaluation CLI condivisa per B0 e B1.
+Evaluation CLI condivisa per B0, B1 e M1.
 
 Prima versione:
 - valuta sul tuning set per default;
@@ -18,6 +18,10 @@ Esempi:
     python scripts/evaluate.py \
         --experiment B0 \
         --checkpoint_path /content/checkpoints/B0_center_map.pt
+
+    python scripts/evaluate.py \
+        --experiment M1 \
+        --checkpoint_path /content/checkpoints/M1_best.pt
 
 L'internal test resta congelato durante lo sviluppo. Per usarlo serve
 esplicitamente:
@@ -151,24 +155,13 @@ def load_model_for_evaluation(
             {},
         )
 
-    if experiment == "B1":
-        
-        # Non serve scaricare nuovamente i pesi ImageNet:
-        # il checkpoint contiene gia' tutto il model_state.
-        model = build_model(
-            "B1",
-            experiment_config,
-            height=height,
-            width=width,
-            pretrained=False,
-        ).to(device)
-
+    if experiment in ("B1", "M1"):
         if (
             not isinstance(checkpoint, dict)
             or "model_state" not in checkpoint
         ):
             raise ValueError(
-                "Checkpoint B1 non valido: "
+                f"Checkpoint {experiment} non valido: "
                 "manca 'model_state'."
             )
 
@@ -176,18 +169,21 @@ def load_model_for_evaluation(
             "experiment"
         )
 
+        # I vecchi checkpoint B1 possono non avere questo campo.
+        # M1, invece, e' stato introdotto con il metadato obbligatorio:
+        # un checkpoint senza identificativo non e' verificabile.
         if (
-            checkpoint_experiment is not None
-            and checkpoint_experiment != "B1"
+            (experiment == "M1" and checkpoint_experiment != "M1")
+            or (
+                experiment == "B1"
+                and checkpoint_experiment not in (None, "B1")
+            )
         ):
             raise ValueError(
                 "Checkpoint incompatibile: "
-                f"experiment={checkpoint_experiment}"
+                f"richiesto {experiment}, "
+                f"trovato experiment={checkpoint_experiment}."
             )
-
-        model.load_state_dict(
-            checkpoint["model_state"]
-        )
 
         loss_config = experiment_config[
             "loss"
@@ -195,10 +191,24 @@ def load_model_for_evaluation(
 
         if loss_config["name"] != "mse":
             raise ValueError(
-                "B1 supporta attualmente solo loss MSE, "
+                f"{experiment} supporta attualmente solo loss MSE, "
                 f"ma experiments.yaml contiene: "
                 f"{loss_config['name']}"
             )
+
+        # Il checkpoint contiene gia' i pesi dell'encoder: non serve
+        # scaricare di nuovo i pesi ImageNet durante la valutazione.
+        model = build_model(
+            experiment,
+            experiment_config,
+            height=height,
+            width=width,
+            pretrained=False,
+        ).to(device)
+
+        model.load_state_dict(
+            checkpoint["model_state"]
+        )
 
         checkpoint_metadata = {
             "epoch": checkpoint.get(
@@ -323,6 +333,7 @@ def main():
         choices=[
             "B0",
             "B1",
+            "M1",
         ],
         required=True,
     )
@@ -334,7 +345,7 @@ def main():
         help=(
             "Checkpoint da valutare. "
             "Per B0: B0_center_map.pt. "
-            "Per B1: preferibilmente B1_best.pt."
+            "Per B1/M1: preferibilmente <esperimento>_best.pt."
         ),
     )
 

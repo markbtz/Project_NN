@@ -11,7 +11,7 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from src.data.dataset import SaliconDataset
 from src.models.multiscale import M1MultiScale
-from src.models.baseline import get_device, set_seed
+from src.runtime import get_device, set_seed
 
 
 DATA_DIR = "/content/data_local"

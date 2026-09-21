@@ -7,6 +7,7 @@ from src.models.baseline import (
     CenterPriorB0,
 )
 
+from src.models.multiscale import M1MultiScale
 
 def build_model(
     experiment: str,
@@ -32,6 +33,16 @@ def build_model(
         )
 
         return B1Baseline(
+            pretrained=pretrained,
+            decoder_width=decoder_width,
+        )
+
+    if experiment == "M1":
+        decoder_width = int(
+            experiment_config["decoder"]["width"]
+        )
+
+        return M1MultiScale(
             pretrained=pretrained,
             decoder_width=decoder_width,
         )

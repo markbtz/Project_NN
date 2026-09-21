@@ -1,4 +1,10 @@
+from pathlib import Path
+import sys
+
 import torch
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO_ROOT))
 
 from src.models.multiscale import M1MultiScale
 from src.models.baseline import to_probability_map

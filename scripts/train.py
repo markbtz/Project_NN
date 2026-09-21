@@ -1,5 +1,5 @@
 """
-Training loop per B0/B1 (vedi configs/experiments.yaml).
+Training loop per B0/B1/M1 (vedi configs/experiments.yaml).
 
 Il training utilizza il dataset reale SALICON tramite SaliconDataset.
 
@@ -63,8 +63,6 @@ from src.checkpoints import (
 )
 
 from src.models.factory import build_model
-from src.models.multiscale import M1MultiScale
-
 from src.config_utils import (
     load_yaml_config,
     resolve_project_path,
@@ -92,35 +90,18 @@ DEFAULT_EXPERIMENTS_CONFIG = os.path.join(
 )
 
 def train_mse_model(args, device, experiment_config):
-    if args.experiment == "B1":
-        model = build_model(
-            "B1",
-            experiment_config,
-            height=args.height,
-            width=args.width,
-            pretrained=args.pretrained,
-        ).to(device)
-
-    elif args.experiment == "M1":
-        decoder_width = int(
-            experiment_config.get(
-                "decoder",
-                {},
-            ).get(
-                "width",
-                96,
-            )
-        )
-
-        model = M1MultiScale(
-            pretrained=args.pretrained,
-            decoder_width=decoder_width,
-        ).to(device)
-
-    else:
+    if args.experiment not in ("B1", "M1"):
         raise ValueError(
             f"Esperimento non supportato: {args.experiment}"
         )
+
+    model = build_model(
+        args.experiment,
+        experiment_config,
+        height=args.height,
+        width=args.width,
+        pretrained=args.pretrained,
+    ).to(device)
 
     if args.optimizer_name != "AdamW":
         raise ValueError(
@@ -258,11 +239,6 @@ def train_mse_model(args, device, experiment_config):
         enabled=args.early_stopping_enabled,
         patience=args.early_stopping_patience,
     )
-
-    early_stopping = EarlyStopping(
-    enabled=args.early_stopping_enabled,
-    patience=args.early_stopping_patience,
-)
 
     history = TrainingHistory()
 

@@ -152,8 +152,8 @@ experiments:
     # Mantiene la stessa loss della base scelta.
     loss:
       name: "cc_kld"
-      cc_weight: null
-      kld_weight: null
+      cc_weight: 0.5
+      kld_weight: 0.5
 
 
   M2:

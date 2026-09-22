@@ -99,3 +99,39 @@ def test_g_gate_receives_gradients():
         torch.isfinite(gradient).all()
         for gradient in gate_gradients
     )
+
+def test_g_freezes_base_and_keeps_it_in_eval():
+    model = AdaptiveCenterPriorG(
+        height=64,
+        width=64,
+        pretrained=False,
+        gate_hidden=16,
+    )
+
+    model.freeze_base_and_prior()
+
+    # Simula quello che fara' train.py
+    model.train()
+
+    assert model.training
+
+    # La base deve restare in eval.
+    assert not model.base_model.training
+
+    # Anche il prior resta in eval.
+    assert not model.center_prior.training
+
+    # Il gate invece deve essere in training.
+    assert model.gate.training
+
+    # Nessun parametro M1-L deve essere allenabile.
+    assert all(
+        not parameter.requires_grad
+        for parameter in model.base_model.parameters()
+    )
+
+    # I parametri del gate devono essere allenabili.
+    assert all(
+        parameter.requires_grad
+        for parameter in model.gate.parameters()
+    )

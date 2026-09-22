@@ -85,6 +85,8 @@ class AdaptiveCenterPriorG(nn.Module):
             nn.Sigmoid(),
         )
 
+        self._base_frozen = False
+
     def forward(
         self,
         x,
@@ -184,3 +186,36 @@ class AdaptiveCenterPriorG(nn.Module):
         self.center_prior.load_state_dict(
             state_dict
         )
+
+    def freeze_base_and_prior(self):
+        """
+        Congela M1-L e B0.
+
+        Durante il training di G resta allenabile
+        soltanto il gate che produce alpha.
+        """
+        self._base_frozen = True
+
+        self.base_model.requires_grad_(False)
+        self.center_prior.requires_grad_(False)
+
+        self.gate.requires_grad_(True)
+
+        self.base_model.eval()
+        self.center_prior.eval()
+
+        return self
+
+    def train(self, mode=True):
+        """
+        Mantiene M1-L e B0 in eval mode anche quando
+        il trainer chiama model.train().
+        """
+        super().train(mode)
+
+        if self._base_frozen:
+            self.base_model.eval()
+            self.center_prior.eval()
+            self.gate.train(mode)
+
+        return self

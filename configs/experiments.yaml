@@ -144,6 +144,9 @@ experiments:
     base_model: "M1-L"
     center_prior: "B0"
 
+    gate:
+      hidden_dim: 64
+
     target: "density_map_prob"
 
     # Mantiene la stessa loss della base scelta.

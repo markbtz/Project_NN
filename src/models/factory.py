@@ -1,7 +1,7 @@
 """
 Factory condivisa per la costruzione dei modelli.
 """
-
+from src.models.adaptive_center_prior import AdaptiveCenterPriorG
 from src.models.baseline import (
     B1Baseline,
     CenterPriorB0,
@@ -46,7 +46,18 @@ def build_model(
             pretrained=pretrained,
             decoder_width=decoder_width,
         )
+    if experiment == "G":
+        gate_config = experiment_config.get("gate", {})
 
+        return AdaptiveCenterPriorG(
+            height=height,
+            width=width,
+            pretrained=pretrained,
+            decoder_width=96,
+            gate_hidden=int(
+                gate_config.get("hidden_dim", 64)
+            ),
+        )
     raise ValueError(
         f"Esperimento non supportato dalla model factory: {experiment}"
     )

@@ -115,6 +115,7 @@ experiments:
       - "C3"
       - "C4"
       - "C5"
+      
 
     # La loss CC+KLD viene applicata alla rappresentazione probabilistica.
     target: "density_map_prob"
@@ -127,8 +128,8 @@ experiments:
       name: "cc_kld"
 
       # Da definire sul tuning set quando la loss combinata sara' implementata.
-      cc_weight: null
-      kld_weight: null
+      cc_weight: 0.5
+      kld_weight: 0.5
 
 
   G:

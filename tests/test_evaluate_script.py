@@ -1,5 +1,6 @@
 import csv
 import json
+import math
 import sys
 import torch
 from torch import nn
@@ -10,16 +11,17 @@ import pytest
 from scripts import evaluate as evaluate_script
 from scripts.evaluate import save_evaluation_results
 from src.evaluation import evaluate_model
+from src.models.factory import build_model
 
 
-@pytest.mark.parametrize("experiment", ["B1", "M1", "M1-L"])
+@pytest.mark.parametrize("experiment", ["B1", "M1", "M1-L", "G"])
 def test_save_evaluation_results_writes_csv_and_json(
     tmp_path,
     experiment,
 ):
     result = {
         "summary": {
-            "loss": None if experiment == "M1-L" else 0.01,
+            "loss": None if experiment in ("M1-L", "G") else 0.01,
             "cc": 0.80,
             "sim": 0.70,
             "kld": 0.30,
@@ -87,7 +89,7 @@ def test_save_evaluation_results_writes_csv_and_json(
     assert summary["n_samples"] == 2
     assert summary["checkpoint"]["epoch"] == 3
 
-@pytest.mark.parametrize("experiment", ["B1", "M1", "M1-L"])
+@pytest.mark.parametrize("experiment", ["B1", "M1", "M1-L", "G"])
 def test_internal_test_requires_final_evaluation(
     monkeypatch,
     capsys,
@@ -126,8 +128,8 @@ class TinySaliencyModel(nn.Module):
         return torch.sigmoid(self.conv(images))
 
 
-@pytest.mark.parametrize("experiment", ["M1", "M1-L"])
-def test_multiscale_checkpoint_evaluation_writes_one_row_per_image(
+@pytest.mark.parametrize("experiment", ["M1", "M1-L", "G"])
+def test_learned_checkpoint_evaluation_writes_one_row_per_image(
     tmp_path,
     monkeypatch,
     experiment,
@@ -169,13 +171,18 @@ def test_multiscale_checkpoint_evaluation_writes_one_row_per_image(
     experiment_config = {
         "target": (
             "density_map_prob"
-            if experiment == "M1-L"
+            if experiment in ("M1-L", "G")
             else "density_map_raw"
         ),
         "loss": {
-            "name": "cc_kld" if experiment == "M1-L" else "mse"
+            "name": "cc_kld" if experiment in ("M1-L", "G") else "mse"
         },
     }
+    if experiment == "G":
+        experiment_config.update(
+            base_model="M1-L",
+            center_prior="B0",
+        )
     (
         model,
         prediction_fn,
@@ -193,7 +200,7 @@ def test_multiscale_checkpoint_evaluation_writes_one_row_per_image(
 
     assert factory_calls == [(experiment, 2, 2, False)]
     assert prediction_fn is None
-    if experiment == "M1-L":
+    if experiment in ("M1-L", "G"):
         assert loss_fn is None
         assert loss_target_key is None
     else:
@@ -260,7 +267,7 @@ def test_multiscale_checkpoint_evaluation_writes_one_row_per_image(
     ]
     assert summary["experiment"] == experiment
     assert summary["n_samples"] == len(rows) == 3
-    if experiment == "M1-L":
+    if experiment in ("M1-L", "G"):
         assert summary["loss"] is None
     else:
         assert summary["loss"] is not None
@@ -275,9 +282,12 @@ def test_multiscale_checkpoint_evaluation_writes_one_row_per_image(
         ("M1-L", "M1"),
         ("M1-L", "B1"),
         ("M1-L", None),
+        ("G", "M1-L"),
+        ("G", "M1"),
+        ("G", None),
     ],
 )
-def test_multiscale_rejects_wrong_or_missing_experiment_metadata(
+def test_learned_model_rejects_wrong_or_missing_experiment_metadata(
     tmp_path,
     experiment,
     checkpoint_experiment,
@@ -294,14 +304,19 @@ def test_multiscale_rejects_wrong_or_missing_experiment_metadata(
             experiment_config={
                 "target": (
                     "density_map_prob"
-                    if experiment == "M1-L"
+                    if experiment in ("M1-L", "G")
                     else "density_map_raw"
                 ),
                 "loss": {
                     "name": (
-                        "cc_kld" if experiment == "M1-L" else "mse"
+                        "cc_kld" if experiment in ("M1-L", "G") else "mse"
                     )
                 },
+                **(
+                    {"base_model": "M1-L", "center_prior": "B0"}
+                    if experiment == "G"
+                    else {}
+                ),
             },
             checkpoint_path=str(checkpoint_path),
             device=torch.device("cpu"),
@@ -377,3 +392,88 @@ def test_b1_rejects_checkpoint_from_other_experiment(
             height=192,
             width=256,
         )
+
+
+def test_g_real_model_checkpoint_produces_per_image_csv_and_summary(tmp_path):
+    config = {
+        "base_model": "M1-L",
+        "center_prior": "B0",
+        "gate": {"hidden_dim": 8},
+        "target": "density_map_prob",
+        "loss": {"name": "cc_kld"},
+    }
+    original = build_model(
+        "G", config, height=64, width=64, pretrained=False
+    )
+    with torch.no_grad():
+        original.gate[0].weight.fill_(0.01)
+    checkpoint_path = tmp_path / "G_best.pt"
+    torch.save(
+        {
+            "model_state": original.state_dict(),
+            "experiment": "G",
+            "epoch": 2,
+            "best_score": 0.7,
+            "selection_metric": "cc",
+            "selection_mode": "max",
+        },
+        checkpoint_path,
+    )
+    del original
+
+    model, prediction_fn, loss_fn, loss_target_key, metadata = (
+        evaluate_script.load_model_for_evaluation(
+            experiment="G",
+            experiment_config=config,
+            checkpoint_path=str(checkpoint_path),
+            device=torch.device("cpu"),
+            height=64,
+            width=64,
+        )
+    )
+    assert prediction_fn is None
+    assert loss_fn is None
+    assert loss_target_key is None
+    assert torch.allclose(
+        model.gate[0].weight,
+        torch.full_like(model.gate[0].weight, 0.01),
+    )
+
+    samples = []
+    for index in range(3):
+        target = torch.rand(1, 64, 64)
+        samples.append(
+            {
+                "image": torch.rand(3, 64, 64),
+                "density_map_prob": target / target.sum(),
+                "image_id": f"img_{index}",
+            }
+        )
+    result = evaluate_model(
+        model,
+        DataLoader(samples, batch_size=2, shuffle=False),
+        torch.device("cpu"),
+        collect_per_sample=True,
+    )
+    csv_path, json_path = save_evaluation_results(
+        result,
+        experiment="G",
+        split="tuning",
+        checkpoint_path=str(checkpoint_path),
+        checkpoint_metadata=metadata,
+        results_dir=str(tmp_path / "results"),
+    )
+    with open(csv_path, newline="", encoding="utf-8") as file:
+        rows = list(csv.DictReader(file))
+    with open(json_path, encoding="utf-8") as file:
+        summary = json.load(file)
+
+    assert [row["image_id"] for row in rows] == [
+        "img_0", "img_1", "img_2"
+    ]
+    assert set(rows[0]) == {"image_id", "cc", "sim", "kld"}
+    assert summary["experiment"] == "G"
+    assert summary["n_samples"] == len(rows) == 3
+    assert summary["loss"] is None
+    assert summary["checkpoint"]["epoch"] == 2
+    assert all(math.isfinite(summary[key]) for key in ("cc", "sim", "kld"))

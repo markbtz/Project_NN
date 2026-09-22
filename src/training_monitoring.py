@@ -3,6 +3,7 @@ Utility condivise per il monitoraggio del training.
 """
 import csv
 import os
+import tempfile
 
 class EarlyStopping:
     """
@@ -80,6 +81,14 @@ class TrainingHistory:
     ):
         """
         Salva la training history in formato CSV.
+
+        Scrittura atomica: si scrive prima su un file temporaneo nella
+        stessa directory, poi si sostituisce il file finale con
+        os.replace(). Questo evita che una disconnessione Colab a meta'
+        scrittura lasci un CSV troncato/corrotto — scenario concreto,
+        non solo teorico, dato che la history vive sullo stesso
+        checkpoint_dir su Drive dei checkpoint, esposto alle stesse
+        interruzioni di sessione.
         """
 
         directory = os.path.dirname(path)
@@ -98,21 +107,34 @@ class TrainingHistory:
             "selection_value",
         ]
 
-        with open(
-            path,
-            "w",
-            newline="",
-            encoding="utf-8",
-        ) as file:
-            writer = csv.DictWriter(
-                file,
-                fieldnames=fieldnames,
-            )
+        fd, tmp_path = tempfile.mkstemp(
+            dir=directory or ".",
+            prefix=os.path.basename(path) + ".",
+            suffix=".tmp",
+        )
 
-            writer.writeheader()
-            writer.writerows(
-                self.records
-            )
+        try:
+            with os.fdopen(
+                fd,
+                "w",
+                newline="",
+                encoding="utf-8",
+            ) as file:
+                writer = csv.DictWriter(
+                    file,
+                    fieldnames=fieldnames,
+                )
+
+                writer.writeheader()
+                writer.writerows(
+                    self.records
+                )
+
+            os.replace(tmp_path, path)
+        except BaseException:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+            raise
 
     def load_csv(
         self,

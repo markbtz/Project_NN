@@ -324,3 +324,88 @@ def test_early_stopping_resumes_from_history():
     assert early_stopping.step(
         improved=False
     )
+
+def test_training_history_save_csv_is_atomic_no_leftover_tmp(tmp_path):
+    """
+    save_csv scrive su un file temporaneo nella stessa directory e lo
+    sostituisce con os.replace(): dopo una scrittura riuscita non deve
+    restare alcun file temporaneo residuo.
+    """
+    history = TrainingHistory()
+
+    history.add_epoch(
+        epoch=1,
+        train_loss=0.5,
+        validation_loss=0.4,
+        selection_metric="cc",
+        selection_value=0.7,
+    )
+
+    csv_path = tmp_path / "history.csv"
+
+    history.save_csv(
+        str(csv_path)
+    )
+
+    files_in_dir = [
+        p.name for p in tmp_path.iterdir()
+    ]
+
+    assert files_in_dir == ["history.csv"]
+
+
+def test_training_history_save_csv_preserves_previous_file_on_crash(
+    tmp_path, monkeypatch
+):
+    """
+    Se os.replace() fallisce a meta' del salvataggio (es. una
+    disconnessione Colab), il file CSV precedente deve restare
+    intatto — mai un file troncato/corrotto al posto di quello valido.
+    """
+    import os as os_module
+
+    csv_path = tmp_path / "history.csv"
+
+    history_v1 = TrainingHistory()
+    history_v1.add_epoch(
+        epoch=1,
+        train_loss=0.5,
+        validation_loss=0.4,
+        selection_metric="cc",
+        selection_value=0.7,
+    )
+    history_v1.save_csv(str(csv_path))
+
+    original_content = csv_path.read_text(encoding="utf-8")
+
+    history_v2 = TrainingHistory()
+    history_v2.add_epoch(
+        epoch=1,
+        train_loss=0.5,
+        validation_loss=0.4,
+        selection_metric="cc",
+        selection_value=0.7,
+    )
+    history_v2.add_epoch(
+        epoch=2,
+        train_loss=0.4,
+        validation_loss=0.35,
+        selection_metric="cc",
+        selection_value=0.75,
+    )
+
+    def failing_replace(*args, **kwargs):
+        raise OSError("crash simulato a meta' scrittura")
+
+    monkeypatch.setattr(os_module, "replace", failing_replace)
+
+    with pytest.raises(OSError):
+        history_v2.save_csv(str(csv_path))
+
+    assert csv_path.read_text(encoding="utf-8") == original_content
+
+    files_in_dir = [
+        p.name for p in tmp_path.iterdir()
+    ]
+
+    assert files_in_dir == ["history.csv"]

@@ -12,14 +12,14 @@ from scripts.evaluate import save_evaluation_results
 from src.evaluation import evaluate_model
 
 
-@pytest.mark.parametrize("experiment", ["B1", "M1"])
+@pytest.mark.parametrize("experiment", ["B1", "M1", "M1-L"])
 def test_save_evaluation_results_writes_csv_and_json(
     tmp_path,
     experiment,
 ):
     result = {
         "summary": {
-            "loss": 0.01,
+            "loss": None if experiment == "M1-L" else 0.01,
             "cc": 0.80,
             "sim": 0.70,
             "kld": 0.30,
@@ -87,7 +87,7 @@ def test_save_evaluation_results_writes_csv_and_json(
     assert summary["n_samples"] == 2
     assert summary["checkpoint"]["epoch"] == 3
 
-@pytest.mark.parametrize("experiment", ["B1", "M1"])
+@pytest.mark.parametrize("experiment", ["B1", "M1", "M1-L"])
 def test_internal_test_requires_final_evaluation(
     monkeypatch,
     capsys,
@@ -126,15 +126,17 @@ class TinySaliencyModel(nn.Module):
         return torch.sigmoid(self.conv(images))
 
 
-def test_m1_checkpoint_evaluation_writes_one_row_per_image(
+@pytest.mark.parametrize("experiment", ["M1", "M1-L"])
+def test_multiscale_checkpoint_evaluation_writes_one_row_per_image(
     tmp_path,
     monkeypatch,
+    experiment,
 ):
-    checkpoint_path = tmp_path / "M1_best.pt"
+    checkpoint_path = tmp_path / f"{experiment}_best.pt"
     torch.save(
         {
             "model_state": TinySaliencyModel().state_dict(),
-            "experiment": "M1",
+            "experiment": experiment,
             "epoch": 3,
             "best_score": 0.8,
             "selection_metric": "cc",
@@ -165,8 +167,14 @@ def test_m1_checkpoint_evaluation_writes_one_row_per_image(
     )
 
     experiment_config = {
-        "target": "density_map_raw",
-        "loss": {"name": "mse"},
+        "target": (
+            "density_map_prob"
+            if experiment == "M1-L"
+            else "density_map_raw"
+        ),
+        "loss": {
+            "name": "cc_kld" if experiment == "M1-L" else "mse"
+        },
     }
     (
         model,
@@ -175,7 +183,7 @@ def test_m1_checkpoint_evaluation_writes_one_row_per_image(
         loss_target_key,
         checkpoint_metadata,
     ) = evaluate_script.load_model_for_evaluation(
-        experiment="M1",
+        experiment=experiment,
         experiment_config=experiment_config,
         checkpoint_path=str(checkpoint_path),
         device=torch.device("cpu"),
@@ -183,10 +191,14 @@ def test_m1_checkpoint_evaluation_writes_one_row_per_image(
         width=2,
     )
 
-    assert factory_calls == [("M1", 2, 2, False)]
+    assert factory_calls == [(experiment, 2, 2, False)]
     assert prediction_fn is None
-    assert isinstance(loss_fn, nn.MSELoss)
-    assert loss_target_key == "density_map_raw"
+    if experiment == "M1-L":
+        assert loss_fn is None
+        assert loss_target_key is None
+    else:
+        assert isinstance(loss_fn, nn.MSELoss)
+        assert loss_target_key == "density_map_raw"
 
     targets = torch.tensor(
         [
@@ -218,7 +230,7 @@ def test_m1_checkpoint_evaluation_writes_one_row_per_image(
     per_image_path, summary_path = (
         save_evaluation_results(
             result,
-            experiment="M1",
+            experiment=experiment,
             split="tuning",
             checkpoint_path=str(checkpoint_path),
             checkpoint_metadata=checkpoint_metadata,
@@ -246,13 +258,28 @@ def test_m1_checkpoint_evaluation_writes_one_row_per_image(
         "img_1",
         "img_2",
     ]
-    assert summary["experiment"] == "M1"
+    assert summary["experiment"] == experiment
     assert summary["n_samples"] == len(rows) == 3
+    if experiment == "M1-L":
+        assert summary["loss"] is None
+    else:
+        assert summary["loss"] is not None
 
 
-@pytest.mark.parametrize("checkpoint_experiment", ["B1", None])
-def test_m1_rejects_wrong_or_missing_experiment_metadata(
+@pytest.mark.parametrize(
+    ("experiment", "checkpoint_experiment"),
+    [
+        ("M1", "B1"),
+        ("M1", "M1-L"),
+        ("M1", None),
+        ("M1-L", "M1"),
+        ("M1-L", "B1"),
+        ("M1-L", None),
+    ],
+)
+def test_multiscale_rejects_wrong_or_missing_experiment_metadata(
     tmp_path,
+    experiment,
     checkpoint_experiment,
 ):
     checkpoint_path = tmp_path / "wrong_checkpoint.pt"
@@ -263,10 +290,50 @@ def test_m1_rejects_wrong_or_missing_experiment_metadata(
 
     with pytest.raises(ValueError, match="Checkpoint incompatibile"):
         evaluate_script.load_model_for_evaluation(
-            experiment="M1",
+            experiment=experiment,
             experiment_config={
-                "target": "density_map_raw",
-                "loss": {"name": "mse"},
+                "target": (
+                    "density_map_prob"
+                    if experiment == "M1-L"
+                    else "density_map_raw"
+                ),
+                "loss": {
+                    "name": (
+                        "cc_kld" if experiment == "M1-L" else "mse"
+                    )
+                },
+            },
+            checkpoint_path=str(checkpoint_path),
+            device=torch.device("cpu"),
+            height=192,
+            width=256,
+        )
+
+
+@pytest.mark.parametrize(
+    ("target", "loss_name"),
+    [
+        ("density_map_prob", "mse"),
+        ("density_map_raw", "cc_kld"),
+    ],
+)
+def test_m1_l_rejects_wrong_loss_or_target(
+    tmp_path,
+    target,
+    loss_name,
+):
+    checkpoint_path = tmp_path / "M1-L_best.pt"
+    torch.save(
+        {"model_state": {}, "experiment": "M1-L"},
+        checkpoint_path,
+    )
+
+    with pytest.raises(ValueError, match="M1-L richiede"):
+        evaluate_script.load_model_for_evaluation(
+            experiment="M1-L",
+            experiment_config={
+                "target": target,
+                "loss": {"name": loss_name},
             },
             checkpoint_path=str(checkpoint_path),
             device=torch.device("cpu"),

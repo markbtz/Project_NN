@@ -4,6 +4,7 @@ from src.models.baseline import (
     B1Baseline,
     CenterPriorB0,
 )
+from src.models.multiscale import M1MultiScale
 from src.models.factory import build_model
 
 
@@ -48,6 +49,26 @@ def test_build_model_b1():
     assert (
         model.decoder.blocks[0][1].out_channels
         == 96
+    )
+
+def test_build_model_m1_l():
+    experiment_config = {
+        "decoder": {
+            "width": 96,
+        }
+    }
+
+    model = build_model(
+        "M1-L",
+        experiment_config,
+        height=192,
+        width=256,
+        pretrained=False,
+    )
+
+    assert isinstance(
+        model,
+        M1MultiScale,
     )
 
 

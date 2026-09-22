@@ -1,5 +1,5 @@
 """
-Evaluation CLI condivisa per B0, B1 e M1.
+Evaluation CLI condivisa per B0, B1, M1 e M1-L.
 
 Prima versione:
 - valuta sul tuning set per default;
@@ -22,6 +22,10 @@ Esempi:
     python scripts/evaluate.py \
         --experiment M1 \
         --checkpoint_path /content/checkpoints/M1_best.pt
+
+    python scripts/evaluate.py \
+        --experiment M1-L \
+        --checkpoint_path /content/checkpoints/M1-L_best.pt
 
 L'internal test resta congelato durante lo sviluppo. Per usarlo serve
 esplicitamente:
@@ -155,7 +159,7 @@ def load_model_for_evaluation(
             {},
         )
 
-    if experiment in ("B1", "M1"):
+    if experiment in ("B1", "M1", "M1-L"):
         if (
             not isinstance(checkpoint, dict)
             or "model_state" not in checkpoint
@@ -170,10 +174,13 @@ def load_model_for_evaluation(
         )
 
         # I vecchi checkpoint B1 possono non avere questo campo.
-        # M1, invece, e' stato introdotto con il metadato obbligatorio:
-        # un checkpoint senza identificativo non e' verificabile.
+        # M1 e M1-L richiedono il metadato: condividono la stessa
+        # architettura, ma non sono lo stesso esperimento.
         if (
-            (experiment == "M1" and checkpoint_experiment != "M1")
+            (
+                experiment in ("M1", "M1-L")
+                and checkpoint_experiment != experiment
+            )
             or (
                 experiment == "B1"
                 and checkpoint_experiment not in (None, "B1")
@@ -189,12 +196,29 @@ def load_model_for_evaluation(
             "loss"
         ]
 
-        if loss_config["name"] != "mse":
-            raise ValueError(
-                f"{experiment} supporta attualmente solo loss MSE, "
-                f"ma experiments.yaml contiene: "
-                f"{loss_config['name']}"
-            )
+        if experiment == "M1-L":
+            if loss_config["name"] != "cc_kld":
+                raise ValueError(
+                    "M1-L richiede loss cc_kld in experiments.yaml, "
+                    f"trovata: {loss_config['name']}"
+                )
+            if experiment_config["target"] != "density_map_prob":
+                raise ValueError(
+                    "M1-L richiede target density_map_prob."
+                )
+            # CC/SIM/KLD sono confrontabili anche prima di fissare i
+            # pesi della loss combinata. Non riportiamo MSE come loss.
+            loss_fn = None
+            loss_target_key = None
+        else:
+            if loss_config["name"] != "mse":
+                raise ValueError(
+                    f"{experiment} supporta attualmente solo loss MSE, "
+                    f"ma experiments.yaml contiene: "
+                    f"{loss_config['name']}"
+                )
+            loss_fn = nn.MSELoss()
+            loss_target_key = experiment_config["target"]
 
         # Il checkpoint contiene gia' i pesi dell'encoder: non serve
         # scaricare di nuovo i pesi ImageNet durante la valutazione.
@@ -228,10 +252,8 @@ def load_model_for_evaluation(
         return (
             model,
             None,
-            nn.MSELoss(),
-            experiment_config[
-                "target"
-            ],
+            loss_fn,
+            loss_target_key,
             checkpoint_metadata,
         )
 
@@ -334,6 +356,7 @@ def main():
             "B0",
             "B1",
             "M1",
+            "M1-L",
         ],
         required=True,
     )
@@ -345,7 +368,7 @@ def main():
         help=(
             "Checkpoint da valutare. "
             "Per B0: B0_center_map.pt. "
-            "Per B1/M1: preferibilmente <esperimento>_best.pt."
+            "Per B1/M1/M1-L: preferibilmente <esperimento>_best.pt."
         ),
     )
 

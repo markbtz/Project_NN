@@ -1,5 +1,5 @@
 """
-Evaluation CLI condivisa per B0, B1, M1 e M1-L.
+Evaluation CLI condivisa per B0, B1, M1, M1-L e G.
 
 Prima versione:
 - valuta sul tuning set per default;
@@ -26,6 +26,10 @@ Esempi:
     python scripts/evaluate.py \
         --experiment M1-L \
         --checkpoint_path /content/checkpoints/M1-L_best.pt
+
+    python scripts/evaluate.py \
+        --experiment G \
+        --checkpoint_path /content/checkpoints/G_best.pt
 
 L'internal test resta congelato durante lo sviluppo. Per usarlo serve
 esplicitamente:
@@ -159,7 +163,7 @@ def load_model_for_evaluation(
             {},
         )
 
-    if experiment in ("B1", "M1", "M1-L"):
+    if experiment in ("B1", "M1", "M1-L", "G"):
         if (
             not isinstance(checkpoint, dict)
             or "model_state" not in checkpoint
@@ -174,11 +178,12 @@ def load_model_for_evaluation(
         )
 
         # I vecchi checkpoint B1 possono non avere questo campo.
-        # M1 e M1-L richiedono il metadato: condividono la stessa
-        # architettura, ma non sono lo stesso esperimento.
+        # M1 e M1-L condividono l'architettura; G richiede comunque
+        # un checkpoint completo del proprio gate. Per tutti e tre
+        # il metadato experiment e' obbligatorio.
         if (
             (
-                experiment in ("M1", "M1-L")
+                experiment in ("M1", "M1-L", "G")
                 and checkpoint_experiment != experiment
             )
             or (
@@ -196,18 +201,26 @@ def load_model_for_evaluation(
             "loss"
         ]
 
-        if experiment == "M1-L":
+        if experiment in ("M1-L", "G"):
             if loss_config["name"] != "cc_kld":
                 raise ValueError(
-                    "M1-L richiede loss cc_kld in experiments.yaml, "
+                    f"{experiment} richiede loss cc_kld in experiments.yaml, "
                     f"trovata: {loss_config['name']}"
                 )
             if experiment_config["target"] != "density_map_prob":
                 raise ValueError(
-                    "M1-L richiede target density_map_prob."
+                    f"{experiment} richiede target density_map_prob."
+                )
+            if experiment == "G" and (
+                experiment_config.get("base_model") != "M1-L"
+                or experiment_config.get("center_prior") != "B0"
+            ):
+                raise ValueError(
+                    "G richiede base_model M1-L e center_prior B0."
                 )
             # CC/SIM/KLD sono confrontabili anche prima di fissare i
-            # pesi della loss combinata. Non riportiamo MSE come loss.
+            # pesi della loss combinata. Non riportiamo MSE come loss
+            # per M1-L o G.
             loss_fn = None
             loss_target_key = None
         else:
@@ -357,6 +370,7 @@ def main():
             "B1",
             "M1",
             "M1-L",
+            "G",
         ],
         required=True,
     )
@@ -368,7 +382,7 @@ def main():
         help=(
             "Checkpoint da valutare. "
             "Per B0: B0_center_map.pt. "
-            "Per B1/M1/M1-L: preferibilmente <esperimento>_best.pt."
+            "Per B1/M1/M1-L/G: preferibilmente <esperimento>_best.pt."
         ),
     )
 

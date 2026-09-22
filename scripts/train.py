@@ -93,6 +93,36 @@ DEFAULT_EXPERIMENTS_CONFIG = os.path.join(
     "experiments.yaml",
 )
 
+
+def load_g_base_state_dict(checkpoint_path, device):
+    """Carica solo una base che si dichiara esplicitamente M1-L."""
+    checkpoint = torch.load(
+        checkpoint_path,
+        map_location=device,
+    )
+
+    if (
+        not isinstance(checkpoint, dict)
+        or checkpoint.get("experiment") != "M1-L"
+    ):
+        found = (
+            checkpoint.get("experiment")
+            if isinstance(checkpoint, dict)
+            else None
+        )
+        raise ValueError(
+            "Checkpoint base incompatibile per G: "
+            f"richiesto experiment=M1-L, trovato experiment={found}."
+        )
+
+    if not isinstance(checkpoint.get("model_state"), dict):
+        raise ValueError(
+            "Il checkpoint M1-L non contiene un 'model_state' valido."
+        )
+
+    return checkpoint["model_state"]
+
+
 def train_mse_model(args, device, experiment_config):
     if args.experiment not in ("B1", "M1", "M1-L", "G"):
         raise ValueError(
@@ -152,19 +182,11 @@ def train_mse_model(args, device, experiment_config):
                 f"{args.center_prior_checkpoint}"
             )
 
-        base_checkpoint = torch.load(
-            args.base_checkpoint,
-            map_location=device,
-        )
-
-        if "model_state" not in base_checkpoint:
-            raise ValueError(
-                "Il checkpoint M1-L non contiene "
-                "'model_state'."
-            )
-
         model.load_base_state_dict(
-            base_checkpoint["model_state"]
+            load_g_base_state_dict(
+                args.base_checkpoint,
+                device,
+            )
         )
 
         center_prior_state = torch.load(

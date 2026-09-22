@@ -136,9 +136,7 @@ experiments:
     # isola: contributo dell'Adaptive Center Prior
     # task slide: Originalita'
     #
-    # Regola sperimentale:
-    # usare M1-L come base se il cambio di loss viene confermato sul tuning set;
-    # se M1-L non migliora M1, aggiornare base_model a "M1" prima del run di G.
+    # Base fissata a M1-L: G isola l'effetto del prior adattivo.
     model: "adaptive_center_prior"
 
     base_model: "M1-L"

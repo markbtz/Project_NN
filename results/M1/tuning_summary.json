@@ -1,0 +1,16 @@
+{
+  "experiment": "M1",
+  "split": "tuning",
+  "checkpoint_path": "/content/drive/MyDrive/nndl-saliency/checkpoints/M1_best.pt",
+  "checkpoint": {
+    "epoch": 3,
+    "best_score": 0.8734737005233765,
+    "selection_metric": "cc",
+    "selection_mode": "max"
+  },
+  "loss": 0.008484599836170673,
+  "cc": 0.8734737005233765,
+  "sim": 0.7685033089637756,
+  "kld": 0.20279991188049318,
+  "n_samples": 2500
+}

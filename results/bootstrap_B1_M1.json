@@ -1,0 +1,29 @@
+{
+  "delta_cc": {
+    "n_samples": 2500,
+    "n_resamples": 1000,
+    "observed_mean": 0.006177160882949829,
+    "ci_level": 0.95,
+    "ci_lower": 0.004765345213413239,
+    "ci_upper": 0.007543164108395577,
+    "significant_at_ci_level": true
+  },
+  "delta_sim": {
+    "n_samples": 2500,
+    "n_resamples": 1000,
+    "observed_mean": 0.003537017869949341,
+    "ci_level": 0.95,
+    "ci_lower": 0.0021736420795321464,
+    "ci_upper": 0.004893903256952762,
+    "significant_at_ci_level": true
+  },
+  "delta_kld": {
+    "n_samples": 2500,
+    "n_resamples": 1000,
+    "observed_mean": -0.005177996715903282,
+    "ci_level": 0.95,
+    "ci_lower": -0.0076031409846246244,
+    "ci_upper": -0.0026645207060500987,
+    "significant_at_ci_level": true
+  }
+}

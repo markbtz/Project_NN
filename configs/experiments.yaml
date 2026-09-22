@@ -119,6 +119,10 @@ experiments:
     # La loss CC+KLD viene applicata alla rappresentazione probabilistica.
     target: "density_map_prob"
 
+    decoder:
+      name: "multiscale"
+      width: 96
+
     loss:
       name: "cc_kld"
 

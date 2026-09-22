@@ -37,7 +37,7 @@ def build_model(
             decoder_width=decoder_width,
         )
 
-    if experiment == "M1":
+    if experiment in {"M1", "M1-L"}:
         decoder_width = int(
             experiment_config["decoder"]["width"]
         )

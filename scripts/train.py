@@ -94,7 +94,7 @@ DEFAULT_EXPERIMENTS_CONFIG = os.path.join(
 )
 
 def train_mse_model(args, device, experiment_config):
-    if args.experiment not in ("B1", "M1", "M1-L"):
+    if args.experiment not in ("B1", "M1", "M1-L", "G"):
         raise ValueError(
             f"Esperimento non supportato: {args.experiment}"
         )
@@ -107,17 +107,123 @@ def train_mse_model(args, device, experiment_config):
         pretrained=args.pretrained,
     ).to(device)
 
+    checkpoint_path = os.path.join(
+        args.checkpoint_dir,
+        f"{args.experiment}_last.pt",
+    )
+
+    # -----------------------------------------------------
+    # Inizializzazione speciale di G.
+    #
+    # Se G_last.pt non esiste ancora:
+    # - carica il best checkpoint M1-L
+    # - carica il center prior B0
+    #
+    # Se G_last.pt esiste, il normale resume ripristinera'
+    # successivamente l'intero stato di G.
+    # -----------------------------------------------------
+    if (
+        args.experiment == "G"
+        and not os.path.isfile(checkpoint_path)
+    ):
+        if args.base_checkpoint is None:
+            raise ValueError(
+                "Per il primo training di G devi specificare "
+                "--base_checkpoint con M1-L_best.pt."
+            )
+
+        if args.center_prior_checkpoint is None:
+            raise ValueError(
+                "Per il primo training di G devi specificare "
+                "--center_prior_checkpoint con B0_center_map.pt."
+            )
+
+        if not os.path.isfile(args.base_checkpoint):
+            raise FileNotFoundError(
+                f"Checkpoint M1-L non trovato: "
+                f"{args.base_checkpoint}"
+            )
+
+        if not os.path.isfile(
+            args.center_prior_checkpoint
+        ):
+            raise FileNotFoundError(
+                f"Checkpoint B0 non trovato: "
+                f"{args.center_prior_checkpoint}"
+            )
+
+        base_checkpoint = torch.load(
+            args.base_checkpoint,
+            map_location=device,
+        )
+
+        if "model_state" not in base_checkpoint:
+            raise ValueError(
+                "Il checkpoint M1-L non contiene "
+                "'model_state'."
+            )
+
+        model.load_base_state_dict(
+            base_checkpoint["model_state"]
+        )
+
+        center_prior_state = torch.load(
+            args.center_prior_checkpoint,
+            map_location=device,
+        )
+
+        model.load_center_prior_state_dict(
+            center_prior_state
+        )
+
+        print(
+            f"[G] M1-L caricato da: "
+            f"{args.base_checkpoint}"
+        )
+
+        print(
+            f"[G] B0 caricato da: "
+            f"{args.center_prior_checkpoint}"
+        )
+
+    if args.experiment == "G":
+        model.freeze_base_and_prior()
+
     if args.optimizer_name != "AdamW":
         raise ValueError(
             f"{args.experiment} supporta attualmente solo optimizer AdamW, "
             f"ma experiments.yaml contiene: {args.optimizer_name}"
         )
 
-    optimizer = torch.optim.AdamW(
-        model.parameters(),
-        lr=args.learning_rate,
-        weight_decay=args.weight_decay,
-    )
+    if args.experiment == "G":
+        trainable_parameters = [
+            parameter
+            for parameter in model.parameters()
+            if parameter.requires_grad
+        ]
+
+        optimizer = torch.optim.AdamW(
+            trainable_parameters,
+            lr=args.learning_rate,
+            weight_decay=args.weight_decay,
+        )
+
+        trainable_count = sum(
+            parameter.numel()
+            for parameter in trainable_parameters
+        )
+
+        print(
+            f"[G] Parametri allenabili: "
+            f"{trainable_count}"
+        )
+
+    else:
+        optimizer = torch.optim.AdamW(
+            model.parameters(),
+            lr=args.learning_rate,
+            weight_decay=args.weight_decay,
+        )
 
     if args.loss_name == "mse":
         criterion = nn.MSELoss()
@@ -232,11 +338,6 @@ def train_mse_model(args, device, experiment_config):
         batch_size=args.batch_size,
         shuffle=False,
         num_workers=args.num_workers,
-    )
-
-    checkpoint_path = os.path.join(
-        args.checkpoint_dir,
-        f"{args.experiment}_last.pt",
     )
 
     start_epoch, best_score = load_training_checkpoint(
@@ -541,7 +642,7 @@ def main():
 
     parser.add_argument(
         "--experiment",
-        choices=["B0", "B1", "M1", "M1-L"],
+        choices=["B0", "B1", "M1", "M1-L", "G"],
         required=True,
     )
 
@@ -557,6 +658,26 @@ def main():
         type=float,
         default=None,
         help="Override opzionale del peso KLD per la loss CC+KLD.",
+    )
+
+    parser.add_argument(
+        "--base_checkpoint",
+        type=str,
+        default=None,
+        help=(
+            "Best checkpoint della base M1-L "
+            "usato per inizializzare G."
+        ),
+    )
+
+    parser.add_argument(
+        "--center_prior_checkpoint",
+        type=str,
+        default=None,
+        help=(
+            "Checkpoint B0_center_map.pt "
+            "usato per inizializzare G."
+        ),
     )
 
     parser.add_argument(
@@ -848,6 +969,11 @@ def main():
             ]
         )
 
+    elif args.experiment == "G":
+        # G riceve i pesi dalla M1-L best.
+        # Non serve scaricare una nuova ResNet pretrained.
+        args.pretrained = False
+
 
     # -----------------------------------------------------
     # Protezione del protocollo B0
@@ -915,7 +1041,7 @@ def main():
         f"Target: {args.target_key}"
     )
 
-    if args.experiment in ("B1", "M1", "M1-L"):
+    if args.experiment in ("B1", "M1", "M1-L", "G"):
         print(
             f"Optimizer: "
             f"{args.optimizer_name}"
@@ -976,6 +1102,17 @@ def main():
                 f"KLD weight: {args.kld_weight}"
             )
 
+        if args.experiment == "G":
+            print(
+                f"Base checkpoint: "
+                f"{args.base_checkpoint}"
+            )
+
+            print(
+                f"Center prior checkpoint: "
+                f"{args.center_prior_checkpoint}"
+            )
+
         print(
             f"Validation split: "
             f"{args.validation_split}"
@@ -987,7 +1124,7 @@ def main():
             f"({args.selection_mode})"
         )
 
-    if args.experiment in ("B1", "M1", "M1-L"):
+    if args.experiment in ("B1", "M1", "M1-L", "G"):
         train_mse_model(
             args,
             device,

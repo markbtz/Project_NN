@@ -6,6 +6,7 @@ from src.models.baseline import (
 )
 from src.models.multiscale import M1MultiScale
 from src.models.factory import build_model
+from src.models.adaptive_center_prior import AdaptiveCenterPriorG
 
 
 def test_build_model_b0():
@@ -81,3 +82,31 @@ def test_build_model_rejects_unknown_experiment():
             width=256,
             pretrained=False,
         )
+def test_build_model_g():
+    config = {
+        "model": "adaptive_center_prior",
+        "base_model": "M1-L",
+        "center_prior": "B0",
+        "gate": {
+            "hidden_dim": 64,
+        },
+        "target": "density_map_prob",
+        "loss": {
+            "name": "cc_kld",
+            "cc_weight": 0.5,
+            "kld_weight": 0.5,
+        },
+    }
+
+    model = build_model(
+        "G",
+        config,
+        height=64,
+        width=64,
+        pretrained=False,
+    )
+
+    assert isinstance(
+        model,
+        AdaptiveCenterPriorG,
+    )

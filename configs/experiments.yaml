@@ -144,13 +144,16 @@ experiments:
     base_model: "M1-L"
     center_prior: "B0"
 
+    gate:
+      hidden_dim: 64
+
     target: "density_map_prob"
 
     # Mantiene la stessa loss della base scelta.
     loss:
       name: "cc_kld"
-      cc_weight: null
-      kld_weight: null
+      cc_weight: 0.5
+      kld_weight: 0.5
 
 
   M2:

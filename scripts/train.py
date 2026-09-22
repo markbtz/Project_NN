@@ -34,6 +34,8 @@ import os
 import sys
 import time
 
+from functools import partial
+
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, Subset
@@ -50,6 +52,8 @@ sys.path.insert(
     0,
     REPO_ROOT,
 )
+
+from src.losses.saliency_losses import cc_kld_loss
 
 from src.training_monitoring import (
     EarlyStopping,
@@ -90,7 +94,7 @@ DEFAULT_EXPERIMENTS_CONFIG = os.path.join(
 )
 
 def train_mse_model(args, device, experiment_config):
-    if args.experiment not in ("B1", "M1"):
+    if args.experiment not in ("B1", "M1", "M1-L"):
         raise ValueError(
             f"Esperimento non supportato: {args.experiment}"
         )
@@ -115,13 +119,22 @@ def train_mse_model(args, device, experiment_config):
         weight_decay=args.weight_decay,
     )
 
-    if args.loss_name != "mse":
-        raise ValueError(
-            f"{args.experiment} supporta attualmente solo loss MSE, "
-            f"ma experiments.yaml contiene: {args.loss_name}"
-        )
+    if args.loss_name == "mse":
+        criterion = nn.MSELoss()
 
-    criterion = nn.MSELoss()
+    elif args.loss_name == "cc_kld":
+        criterion = partial(
+        cc_kld_loss,
+        cc_weight=args.cc_weight,
+        kld_weight=args.kld_weight,
+        eps=args.density_map_epsilon,
+    )
+
+    else:
+        raise ValueError(
+            f"Loss non supportata per {args.experiment}:"
+            f"{args.loss_name}"
+        )
 
     # -----------------------------------------------------
     # Dataset reale SALICON
@@ -308,7 +321,7 @@ def train_mse_model(args, device, experiment_config):
         print(
             f"[{args.experiment}] Epoca "
             f"{epoch + 1}/{args.epochs} "
-            f"- train MSE: "
+            f"- train loss ({args.loss_name}): "
             f"{epoch_loss:.6e} "
             f"- {time.time() - t0:.1f}s"
         )
@@ -344,7 +357,7 @@ def train_mse_model(args, device, experiment_config):
 
         print(
             f"[{args.experiment}] Tuning "
-            f"- MSE: "
+            f"- Loss ({args.loss_name}): "
             f"{validation_summary['loss']:.6e} "
             f"- CC: "
             f"{validation_summary['cc']:.6f} "
@@ -528,8 +541,22 @@ def main():
 
     parser.add_argument(
         "--experiment",
-        choices=["B0", "B1", "M1"],
+        choices=["B0", "B1", "M1", "M1-L"],
         required=True,
+    )
+
+    parser.add_argument(
+        "--cc_weight",
+        type=float,
+        default=None,
+        help="Override opzionale del peso CC per la loss CC+KLD.",
+    )
+
+    parser.add_argument(
+        "--kld_weight",
+        type=float,
+        default=None,
+        help="Override opzionale del peso KLD per la loss CC+KLD.",
     )
 
     parser.add_argument(
@@ -782,7 +809,37 @@ def main():
         "name"
     ]
 
-    if args.experiment in ("B1", "M1"):
+    if args.loss_name == "cc_kld":
+
+        if args.cc_weight is None:
+            args.cc_weight = loss_config.get(
+                "cc_weight"
+            )
+
+        if args.kld_weight is None:
+            args.kld_weight = loss_config.get(
+                "kld_weight"
+            )
+
+        if (
+            args.cc_weight is None
+            or args.kld_weight is None
+        ):
+            raise ValueError(
+                "Per la loss cc_kld devi specificare "
+                "cc_weight e kld_weight nel YAML "
+                "oppure tramite CLI."
+            )
+
+        args.cc_weight = float(
+            args.cc_weight
+        )
+
+        args.kld_weight = float(
+            args.kld_weight
+        )
+
+    if args.experiment in ("B1", "M1", "M1-L"):
         args.pretrained = bool(
             experiment_config[
                 "encoder"
@@ -858,7 +915,7 @@ def main():
         f"Target: {args.target_key}"
     )
 
-    if args.experiment in ("B1", "M1"):
+    if args.experiment in ("B1", "M1", "M1-L"):
         print(
             f"Optimizer: "
             f"{args.optimizer_name}"
@@ -910,6 +967,15 @@ def main():
             f"{args.loss_name}"
         )
 
+        if args.loss_name == "cc_kld":
+            print(
+                f"CC weight: {args.cc_weight}"
+            )
+
+            print(
+                f"KLD weight: {args.kld_weight}"
+            )
+
         print(
             f"Validation split: "
             f"{args.validation_split}"
@@ -921,7 +987,7 @@ def main():
             f"({args.selection_mode})"
         )
 
-    if args.experiment in ("B1", "M1"):
+    if args.experiment in ("B1", "M1", "M1-L"):
         train_mse_model(
             args,
             device,

@@ -115,6 +115,7 @@ experiments:
       - "C3"
       - "C4"
       - "C5"
+      
 
     # La loss CC+KLD viene applicata alla rappresentazione probabilistica.
     target: "density_map_prob"

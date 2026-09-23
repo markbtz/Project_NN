@@ -8,6 +8,7 @@ from src.models.baseline import (
 )
 
 from src.models.multiscale import M1MultiScale
+from src.models.hierarchical_transformer import M2HierarchicalTransformer
 
 def build_model(
     experiment: str,
@@ -46,6 +47,17 @@ def build_model(
             pretrained=pretrained,
             decoder_width=decoder_width,
         )
+
+    if experiment == "M2":
+        decoder_width = int(
+        experiment_config["decoder"]["width"]
+    )
+
+    return M2HierarchicalTransformer(
+        pretrained=pretrained,
+        decoder_width=decoder_width,
+    )
+    
     if experiment == "G":
         gate_config = experiment_config.get("gate", {})
 

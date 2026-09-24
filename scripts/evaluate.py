@@ -163,7 +163,7 @@ def load_model_for_evaluation(
             {},
         )
 
-    if experiment in ("B1", "M1", "M1-L", "G"):
+    if experiment in ("B1", "M1", "M1-L", "G","M2"):
         if (
             not isinstance(checkpoint, dict)
             or "model_state" not in checkpoint
@@ -183,7 +183,7 @@ def load_model_for_evaluation(
         # il metadato experiment e' obbligatorio.
         if (
             (
-                experiment in ("M1", "M1-L", "G")
+                experiment in ("M1", "M1-L", "G", "M2")
                 and checkpoint_experiment != experiment
             )
             or (
@@ -201,7 +201,7 @@ def load_model_for_evaluation(
             "loss"
         ]
 
-        if experiment in ("M1-L", "G"):
+        if experiment in ("M1-L", "G", "M2"):
             if loss_config["name"] != "cc_kld":
                 raise ValueError(
                     f"{experiment} richiede loss cc_kld in experiments.yaml, "
@@ -371,6 +371,7 @@ def main():
             "M1",
             "M1-L",
             "G",
+            "M2",
         ],
         required=True,
     )
@@ -382,7 +383,7 @@ def main():
         help=(
             "Checkpoint da valutare. "
             "Per B0: B0_center_map.pt. "
-            "Per B1/M1/M1-L/G: preferibilmente <esperimento>_best.pt."
+            "Per B1/M1/M1-L/G/M2: preferibilmente <esperimento>_best.pt."
         ),
     )
 

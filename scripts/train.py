@@ -124,7 +124,7 @@ def load_g_base_state_dict(checkpoint_path, device):
 
 
 def train_mse_model(args, device, experiment_config):
-    if args.experiment not in ("B1", "M1", "M1-L", "G"):
+    if args.experiment not in ("B1", "M1", "M1-L", "G", "M2"):
         raise ValueError(
             f"Esperimento non supportato: {args.experiment}"
         )
@@ -664,7 +664,7 @@ def main():
 
     parser.add_argument(
         "--experiment",
-        choices=["B0", "B1", "M1", "M1-L", "G"],
+        choices=["B0", "B1", "M1", "M1-L", "G", "M2"],
         required=True,
     )
 
@@ -982,7 +982,7 @@ def main():
             args.kld_weight
         )
 
-    if args.experiment in ("B1", "M1", "M1-L"):
+    if args.experiment in ("B1", "M1", "M1-L", "M2"):
         args.pretrained = bool(
             experiment_config[
                 "encoder"
@@ -1063,7 +1063,7 @@ def main():
         f"Target: {args.target_key}"
     )
 
-    if args.experiment in ("B1", "M1", "M1-L", "G"):
+    if args.experiment in ("B1", "M1", "M1-L", "G", "M2"):
         print(
             f"Optimizer: "
             f"{args.optimizer_name}"
@@ -1146,7 +1146,7 @@ def main():
             f"({args.selection_mode})"
         )
 
-    if args.experiment in ("B1", "M1", "M1-L", "G"):
+    if args.experiment in ("B1", "M1", "M1-L", "G", "M2"):
         train_mse_model(
             args,
             device,

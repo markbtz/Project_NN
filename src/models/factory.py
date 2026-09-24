@@ -1,13 +1,15 @@
 """
 Factory condivisa per la costruzione dei modelli.
 """
+
 from src.models.adaptive_center_prior import AdaptiveCenterPriorG
 from src.models.baseline import (
     B1Baseline,
     CenterPriorB0,
 )
-
 from src.models.multiscale import M1MultiScale
+from src.models.hierarchical_transformer import M2HierarchicalTransformer
+
 
 def build_model(
     experiment: str,
@@ -46,8 +48,22 @@ def build_model(
             pretrained=pretrained,
             decoder_width=decoder_width,
         )
+
+    if experiment == "M2":
+        decoder_width = int(
+            experiment_config["decoder"]["width"]
+        )
+
+        return M2HierarchicalTransformer(
+            pretrained=pretrained,
+            decoder_width=decoder_width,
+        )
+
     if experiment == "G":
-        gate_config = experiment_config.get("gate", {})
+        gate_config = experiment_config.get(
+            "gate",
+            {},
+        )
 
         return AdaptiveCenterPriorG(
             height=height,
@@ -55,9 +71,13 @@ def build_model(
             pretrained=pretrained,
             decoder_width=96,
             gate_hidden=int(
-                gate_config.get("hidden_dim", 64)
+                gate_config.get(
+                    "hidden_dim",
+                    64,
+                )
             ),
         )
+
     raise ValueError(
         f"Esperimento non supportato dalla model factory: {experiment}"
     )

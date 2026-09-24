@@ -155,23 +155,27 @@ experiments:
 
 
   M2:
-    # isola: effetto del cambio di encoder mantenendo il decoder/loss comparabili
+    # isola: effetto del cambio di encoder mantenendo decoder e loss comparabili
     # task slide: Advanced
     model: "hierarchical_transformer"
 
-    # Decisione finale ancora da prendere.
-    # Il piano raccomanda un backbone gerarchico leggero
-    # compatibile con feature multi-scala.
-    backbone_family_candidates:
-      - "Swin-Tiny"
-      - "PVT-Tiny"
+    encoder:
+      name: "pvt_v2_b1"
+      pretrained: true
 
-    decoder: "same_as_M1"
+    features:
+      - "C3"
+      - "C4"
+      - "C5"
+
+    decoder:
+      name: "multiscale"
+      width: 96
 
     target: "density_map_prob"
 
-    # M2 mantiene la stessa loss di M1-L.
+    # Stessa loss vincente di M1-L.
     loss:
       name: "cc_kld"
-      cc_weight: null
-      kld_weight: null
+      cc_weight: 0.5
+      kld_weight: 0.5

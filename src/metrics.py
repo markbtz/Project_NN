@@ -212,7 +212,7 @@ def sim(
 def kld(
     prediction: torch.Tensor,
     target: torch.Tensor,
-    eps: float = 1e-8,
+    eps: float = 1e-6,
     reduction: str = "mean",
 ) -> torch.Tensor:
     """
@@ -230,6 +230,15 @@ def kld(
 
     0 significa distribuzioni identiche.
     Più basso è meglio.
+
+    Nota sull'eps: il default (1e-6) e' allineato a
+    configs/data.yaml -> density_map_epsilon, lo stesso valore
+    gia' usato da kld_loss in src/losses/saliency_losses.py.
+    In produzione (scripts/evaluate.py) eps viene comunque
+    sempre passato esplicitamente da li' — questo default
+    serve solo a chi chiama kld() direttamente (es. i test),
+    per evitare di validare un comportamento diverso da quello
+    realmente usato in training/evaluation.
 
     reduction:
         "mean" -> media del batch (default)
@@ -250,10 +259,7 @@ def kld(
 
     score = (
         gt
-        * torch.log(
-            (gt + eps)
-            / (pred + eps)
-        )
+        * torch.log(gt / pred)
     ).sum(dim=1)
 
     return _apply_reduction(

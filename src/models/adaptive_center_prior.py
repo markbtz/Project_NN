@@ -85,6 +85,23 @@ class AdaptiveCenterPriorG(nn.Module):
             nn.Sigmoid(),
         )
 
+        # ---------------------------------------------
+        # Inizializzazione a zero dell'ultimo layer del gate.
+        #
+        # Senza questo, alpha parte da un valore arbitrario deciso
+        # dall'inizializzazione random dei pesi (poteva finire vicino a 0
+        # o vicino a 1 per puro caso) e con un gradiente debole (pochi
+        # parametri, base congelata) rischia di restare li' per tutto il
+        # training invece di imparare a variare per immagine.
+        #
+        # Con l'ultimo layer a zero, il logit prima della sigmoid e'
+        # sempre 0 -> alpha parte esattamente a 0.5 per ogni immagine
+        # (peso neutro tra M1-L e il center prior), e il gradiente decide
+        # da li' come muoverlo, immagine per immagine.
+        # ---------------------------------------------
+        nn.init.zeros_(self.gate[-2].weight)
+        nn.init.zeros_(self.gate[-2].bias)
+
         self._base_frozen = False
 
     def forward(

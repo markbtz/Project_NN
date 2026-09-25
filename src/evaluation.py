@@ -69,6 +69,7 @@ def evaluate_model(
     device,
     *,
     prediction_fn=None,
+    metric_prediction_fn=None,
     loss_fn=None,
     loss_target_key=None,
     metric_target_key="density_map_prob",
@@ -100,6 +101,19 @@ def evaluate_model(
 
         Serve, per esempio, per B0, che produce una prediction
         a partire dalla sola batch size.
+
+    metric_prediction_fn
+        Funzione opzionale con firma:
+
+            metric_prediction_fn(model, batch, device)
+
+        Se specificata, il suo output viene usato esclusivamente
+        per CC/SIM/KLD. La prediction originale continua invece
+        a essere usata per la loss.
+
+        Questo permette, per esempio, di mantenere la MSE sulla
+        prediction raw di B1/M1 e valutare contemporaneamente
+        CC/SIM/KLD sulla probability map.
 
     loss_fn
         Loss opzionale. Deve restituire una loss scalare media
@@ -193,26 +207,41 @@ def evaluate_model(
                         "La prediction deve essere un torch.Tensor."
                     )
 
+                if metric_prediction_fn is None:
+                    metric_prediction = prediction
+                else:
+                    metric_prediction = metric_prediction_fn(
+                        model,
+                        batch,
+                        device,
+                    )
+
+                if not torch.is_tensor(metric_prediction):
+                    raise TypeError(
+                        "La prediction per le metriche deve essere "
+                        "un torch.Tensor."
+                    )
+
                 metric_target = batch[
                     metric_target_key
                 ].to(device)
 
                 cc_values = cc(
-                    prediction,
+                    metric_prediction,
                     metric_target,
                     eps=eps,
                     reduction="none",
                 )
 
                 sim_values = sim(
-                    prediction,
+                    metric_prediction,
                     metric_target,
                     eps=eps,
                     reduction="none",
                 )
 
                 kld_values = kld(
-                    prediction,
+                    metric_prediction,
                     metric_target,
                     eps=eps,
                     reduction="none",

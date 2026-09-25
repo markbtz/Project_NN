@@ -650,11 +650,38 @@ def main():
     # il protocollo delle fixation negative per sAUC.
     # -----------------------------------------------------
 
+    # CC/SIM/KLD devono essere calcolate nello stesso
+    # probability space per tutti i modelli.
+    #
+    # B0 produce gia' direttamente una probability map.
+    # B1/M1/M1-L/G/M2 espongono invece il contratto
+    # predict_probability().
+    metric_prediction_fn = None
+
+    if args.experiment != "B0":
+
+        def probability_metric_prediction_fn(
+            model,
+            batch,
+            device,
+        ):
+            images = batch["image"].to(device)
+
+            return model.predict_probability(
+                images,
+                eps=density_map_epsilon,
+            )
+
+        metric_prediction_fn = (
+            probability_metric_prediction_fn
+        )
+
     result = evaluate_model(
         model,
         data_loader,
         device,
         prediction_fn=prediction_fn,
+        metric_prediction_fn=metric_prediction_fn,
         loss_fn=loss_fn,
         loss_target_key=loss_target_key,
         metric_target_key="density_map_prob",

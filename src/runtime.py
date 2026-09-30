@@ -1,9 +1,9 @@
 """
-Utility condivise per runtime e riproducibilita'.
+Shared runtime and reproducibility utilities.
 
-Questo modulo centralizza:
-- selezione automatica del device;
-- inizializzazione dei seed globali.
+This module centralizes:
+- automatic device selection;
+- global seed initialization.
 """
 
 import random
@@ -27,13 +27,13 @@ def get_device() -> torch.device:
 
 def set_seed(seed: int):
     """
-    Seed globale per riproducibilita' (vedi configs/data.yaml -> seed).
+    Global seed for reproducibility (see configs/data.yaml -> seed).
 
-    IMPORTANTE: SaliconDataset usa random.random() (modulo Python standard,
-    non torch) per decidere l'horizontal flip — settare solo
-    torch.manual_seed() NON basta, l'augmentation resterebbe non
-    deterministica. Chiamare questa funzione una sola volta, a inizio script,
-    prima di costruire dataset/dataloader/modello.
+    IMPORTANT: SaliconDataset usa random.random() (modulo Python standard,
+    rather than torch) to decide the horizontal flip; setting only
+    torch.manual_seed() is NOT enough; augmentation would remain non-
+    deterministic. Call this function once at script startup,
+    before building the dataset/dataloader/model.
     """
 
     random.seed(seed)

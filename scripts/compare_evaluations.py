@@ -11,10 +11,10 @@ METRICS = (
 
 def load_per_image_csv(path):
     """
-    Carica un CSV per-image prodotto da evaluate.py.
+    Load a per-image CSV produced by evaluate.py.
 
-    Le righe vengono indicizzate per image_id in modo che
-    i confronti tra modelli non dipendano dall'ordine del CSV.
+    Rows are indexed by image_id so that
+    model comparisons do not depend on CSV row order.
     """
 
     samples = {}
@@ -36,8 +36,8 @@ def load_per_image_csv(path):
             reader.fieldnames or []
         ):
             raise ValueError(
-                f"CSV non valido: {path}. "
-                "Sono richieste le colonne "
+                f"Invalid CSV: {path}. "
+                "Required columns: "
                 "image_id, cc, sim, kld."
             )
 
@@ -46,7 +46,7 @@ def load_per_image_csv(path):
 
             if image_id in samples:
                 raise ValueError(
-                    "image_id duplicato nel CSV "
+                    "Duplicate image_id in CSV "
                     f"{path}: {image_id}"
                 )
 
@@ -65,10 +65,10 @@ def align_by_image_id(
     right_name,
 ):
     """
-    Allinea due evaluation tramite image_id.
+    Align two evaluations with image_id.
 
-    Fallisce esplicitamente se uno dei due CSV contiene
-    immagini che mancano nell'altro.
+    Fail explicitly if either CSV contains
+    images missing from the other.
     """
 
     left_ids = set(left_samples)
@@ -79,10 +79,10 @@ def align_by_image_id(
 
     if missing_in_right or missing_in_left:
         raise ValueError(
-            "I CSV non contengono gli stessi image_id. "
-            f"Mancanti in {right_name}: "
+            "The CSV files do not contain the same image_id values. "
+            f"Missing in {right_name}: "
             f"{sorted(missing_in_right)}. "
-            f"Mancanti in {left_name}: "
+            f"Missing in {left_name}: "
             f"{sorted(missing_in_left)}."
         )
 
@@ -102,11 +102,11 @@ def compute_differences(
     right_name,
 ):
     """
-    Calcola le differenze per-image come:
+    Compute per-image differences as:
 
         right - left
 
-    Esempi:
+    Examples:
         B1 - B0
         M1 - B1
     """
@@ -175,8 +175,8 @@ def save_differences_csv(
 def main():
     parser = argparse.ArgumentParser(
         description=(
-            "Confronta due CSV per-image "
-            "allineandoli tramite image_id."
+            "Compare two per-image CSV files "
+            "align with image_id."
         )
     )
 
@@ -235,8 +235,8 @@ def main():
     )
 
     print(
-        f"Confrontati {len(rows)} campioni. "
-        f"Risultato salvato in: {output_path}"
+        f"Compared {len(rows)} samples. "
+        f"Result saved to: {output_path}"
     )
 
 

@@ -41,7 +41,7 @@ def check_sample(dataset, index, split_name):
     )
 
     assert torch.isfinite(image).all(), (
-        f"{split_name}: trovati NaN/Inf nell'immagine"
+        f"{split_name}: found NaN/Inf in image"
     )
 
     # -----------------------------------------------------
@@ -59,7 +59,7 @@ def check_sample(dataset, index, split_name):
     )
 
     assert torch.isfinite(density_map_raw).all(), (
-        f"{split_name}: trovati NaN/Inf nella raw density map"
+        f"{split_name}: found NaN/Inf in raw density map"
     )
 
     assert torch.all(density_map_raw >= 0.0), (
@@ -86,7 +86,7 @@ def check_sample(dataset, index, split_name):
 
     assert torch.isfinite(density_map_prob).all(), (
         f"{split_name}: trovati NaN/Inf "
-        f"nella probability density map"
+        f"in the probability density map"
     )
 
     assert torch.all(density_map_prob >= 0.0), (
@@ -96,7 +96,7 @@ def check_sample(dataset, index, split_name):
     probability_sum = density_map_prob.sum().item()
 
     assert abs(probability_sum - 1.0) < 1e-4, (
-        f"{split_name}: probability map non normalizzata "
+        f"{split_name}: probability map is not normalized "
         f"(somma={probability_sum})"
     )
 
@@ -105,7 +105,7 @@ def check_sample(dataset, index, split_name):
     # -----------------------------------------------------
 
     assert fixation_path.exists(), (
-        f"{split_name}: fixation file non trovato: "
+        f"{split_name}: fixation file not found: "
         f"{fixation_path}"
     )
 
@@ -126,21 +126,21 @@ def main():
     data_dir = Path(DATA_DIR)
 
     assert data_dir.exists(), (
-        f"Dataset non trovato: {DATA_DIR}\n"
-        "Esegui prima la preparazione del dataset in Colab."
+        f"Dataset not found: {DATA_DIR}\n"
+        "Prepare the dataset in Colab first."
     )
 
     assert MANIFEST_PATH.exists(), (
-        f"Manifest non trovato: {MANIFEST_PATH}"
+        f"Manifest not found: {MANIFEST_PATH}"
     )
 
     datasets = {}
 
     # -----------------------------------------------------
-    # 1. CONTROLLO SPLIT
+    # 1. CHECK SPLIT
     # -----------------------------------------------------
 
-    print("\n[1/3] Controllo split")
+    print("\n[1/3] Checking split")
 
     for split_name, expected_size in EXPECTED_SPLITS.items():
 
@@ -156,7 +156,7 @@ def main():
         actual_size = len(dataset)
 
         assert actual_size == expected_size, (
-            f"{split_name}: attesi {expected_size} campioni, "
+            f"{split_name}: attesi {expected_size} samples, "
             f"trovati {actual_size}"
         )
 
@@ -164,14 +164,14 @@ def main():
 
         print(
             f"  [OK] {split_name}: "
-            f"{actual_size} campioni"
+            f"{actual_size} samples"
         )
 
     # -----------------------------------------------------
-    # 2. CONTROLLO CAMPIONI
+    # 2. CHECK SAMPLES
     # -----------------------------------------------------
 
-    print("\n[2/3] Controllo campioni")
+    print("\n[2/3] Checking samples")
 
     for split_name, dataset in datasets.items():
 
@@ -189,10 +189,10 @@ def main():
             )
 
     # -----------------------------------------------------
-    # 3. CONTROLLO DATALOADER
+    # 3. CHECK DATALOADER
     # -----------------------------------------------------
 
-    print("\n[3/3] Controllo DataLoader")
+    print("\n[3/3] Checking DataLoader")
 
     train_loader = DataLoader(
         datasets["train"],
@@ -213,7 +213,7 @@ def main():
         192,
         256,
     ), (
-        f"Batch immagini con shape errata: "
+        f"Image batch has invalid shape: "
         f"{images.shape}"
     )
 
@@ -238,15 +238,15 @@ def main():
     )
 
     assert torch.isfinite(images).all(), (
-        "NaN/Inf nel batch immagini"
+        "NaN/Inf in image batch"
     )
 
     assert torch.isfinite(raw_maps).all(), (
-        "NaN/Inf nel batch raw maps"
+        "NaN/Inf in raw-map batch"
     )
 
     assert torch.isfinite(prob_maps).all(), (
-        "NaN/Inf nel batch probability maps"
+        "NaN/Inf in probability-map batch"
     )
 
     assert torch.all(raw_maps >= 0.0), (
@@ -266,12 +266,12 @@ def main():
         torch.ones_like(prob_sums),
         atol=1e-4,
     ), (
-        f"Probability maps non normalizzate: "
+        f"Probability maps are not normalized: "
         f"{prob_sums}"
     )
 
     print(
-        "  [OK] Batch immagini:",
+        "  [OK] Image batch:",
         tuple(images.shape),
     )
 

@@ -13,8 +13,8 @@ from src.models.multiscale import M1MultiScale
 
 def build_m1():
     """
-    Crea M1 senza pesi pretrained, cosi' i test
-    non richiedono download da Internet.
+    Create M1 without pretrained weights so tests
+    do not require Internet downloads.
     """
     return M1MultiScale(
         pretrained=False,

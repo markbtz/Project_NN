@@ -1,22 +1,4 @@
-# Configurazione degli esperimenti del progetto NNDL Saliency.
-#
-# data.yaml resta la source of truth per:
-# - path del dataset
-# - input_size
-# - density_map_epsilon
-# - seed
-# - dimensioni degli split
-#
-# Questo file descrive invece training, architetture e loss.
-#
-# NOTA IMPORTANTE:
-# cc_weight e kld_weight restano null finche' la loss combinata CC+KLD
-# non viene implementata e selezionata sul tuning set. M1-L/G/M2 non
-# devono essere lanciati finche' questi valori non vengono definiti.
-#
-# B1 mantiene AdamW, lr=1e-4, weight_decay=1e-4, batch_size=8, epochs=3.
-# Il best checkpoint dei modelli trainabili viene selezionato sul tuning set
-# con una regola comune definita da selection_metric / selection_mode.
+# NNDL Saliency experiment configuration.
 
 training:
   train_split: "train"
@@ -30,8 +12,8 @@ training:
     enabled: true
     patience: 5
 
-  # Regola comune per scegliere il best checkpoint sul tuning set.
-  # CC: piu' alto e' meglio.
+  # Shared rule for selecting the best checkpoint on the tuning split.
+  # Higher CC is better.
   selection_metric: "cc"
   selection_mode: "max"
 
@@ -44,12 +26,11 @@ training:
 experiments:
 
   B0:
-    # isola: quanto vale il solo center bias
-    # task slide: nessuno / baseline non trainabile
+    # Isolates the center-bias baseline.
     model: "center_prior"
     trainable: false
 
-    # B0 viene calcolato sulle mappe probabilistiche del training set.
+    # B0 is computed from training-set probability maps.
     target: "density_map_prob"
 
     loss:
@@ -57,8 +38,7 @@ experiments:
 
 
   B1:
-    # isola: baseline neurale di riferimento
-    # task slide: Base
+    # Reference neural baseline.
     model: "B1Baseline"
 
     encoder:
@@ -69,7 +49,7 @@ experiments:
       name: "single_bottleneck"
       width: 96
 
-    # MSE deve essere calcolata sulla density map raw [0,1].
+    # Compute MSE on the raw density map in [0, 1].
     target: "density_map_raw"
 
     loss:
@@ -77,9 +57,8 @@ experiments:
 
 
   M1:
-    # isola: effetto puro delle skip connection / feature multi-scala
-    #          a parita' di loss con B1
-    # task slide: Intermediate
+    # Isolates the effect of skip connections / multi-scale features
+    # while keeping the same loss as B1.
     model: "multiscale_resnet18"
 
     encoder:
@@ -95,7 +74,7 @@ experiments:
       name: "multiscale"
       width: 96
 
-    # Stessa target/loss di B1 per isolare l'effetto architetturale.
+    # Same target/loss as B1 to isolate the architecture change.
     target: "density_map_raw"
 
     loss:
@@ -103,8 +82,8 @@ experiments:
 
 
   M1-L:
-    # isola: effetto puro del cambio di loss rispetto a M1
-    # task slide: nessuno / ablation sulla loss
+    # Isolates the loss change relative to M1.
+    # Loss ablation.
     model: "multiscale_resnet18"
 
     encoder:
@@ -117,7 +96,7 @@ experiments:
       - "C5"
       
 
-    # La loss CC+KLD viene applicata alla rappresentazione probabilistica.
+    # Apply CC+KLD to the probability-map representation.
     target: "density_map_prob"
 
     decoder:
@@ -127,16 +106,14 @@ experiments:
     loss:
       name: "cc_kld"
 
-      # Da definire sul tuning set quando la loss combinata sara' implementata.
+      # Weights selected on the tuning split.
       cc_weight: 0.5
       kld_weight: 0.5
 
 
   G:
-    # isola: contributo dell'Adaptive Center Prior
-    # task slide: Originalita'
-    #
-    # Base fissata a M1-L: G isola l'effetto del prior adattivo.
+    # Isolates the Adaptive Center Prior contribution.
+    # Keep M1-L fixed so G isolates the adaptive prior.
     model: "adaptive_center_prior"
 
     base_model: "M1-L"
@@ -147,7 +124,7 @@ experiments:
 
     target: "density_map_prob"
 
-    # Mantiene la stessa loss della base scelta.
+    # Keep the same loss as the base model.
     loss:
       name: "cc_kld"
       cc_weight: 0.5
@@ -155,8 +132,7 @@ experiments:
 
 
   M2:
-    # isola: effetto del cambio di encoder mantenendo decoder e loss comparabili
-    # task slide: Advanced
+    # Isolates the encoder change while keeping decoder and loss comparable.
     model: "hierarchical_transformer"
 
     encoder:
@@ -174,7 +150,7 @@ experiments:
 
     target: "density_map_prob"
 
-    # Stessa loss vincente di M1-L.
+    # Same selected loss as M1-L.
     loss:
       name: "cc_kld"
       cc_weight: 0.5

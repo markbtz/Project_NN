@@ -22,7 +22,7 @@ class AdaptiveCenterPriorG(nn.Module):
             (1 - alpha) * M1-L
             + alpha * center_prior
 
-    alpha viene calcolato separatamente per ogni immagine.
+    alpha is computed independently for each image.
     """
 
     def __init__(
@@ -39,7 +39,7 @@ class AdaptiveCenterPriorG(nn.Module):
         self.eps = eps
 
         # ---------------------------------------------
-        # Base M1-L
+        # M1-L base
         # ---------------------------------------------
         self.base_model = M1MultiScale(
             pretrained=pretrained,
@@ -49,8 +49,8 @@ class AdaptiveCenterPriorG(nn.Module):
         # ---------------------------------------------
         # B0 center prior
         #
-        # Inizialmente uniforme.
-        # Prima del training di G caricheremo
+        # Initially uniform.
+        # Before training G, load
         # B0_center_map.pt.
         # ---------------------------------------------
         self.center_prior = CenterPriorB0(
@@ -59,7 +59,7 @@ class AdaptiveCenterPriorG(nn.Module):
         )
 
         # ---------------------------------------------
-        # Gate adattivo:
+        # Adaptive gate:
         #
         # C5: (B, 512, H/32, W/32)
         # GAP -> (B, 512)
@@ -86,18 +86,18 @@ class AdaptiveCenterPriorG(nn.Module):
         )
 
         # ---------------------------------------------
-        # Inizializzazione a zero dell'ultimo layer del gate.
+        # Zero-initialize the gate output layer.
         #
-        # Senza questo, alpha parte da un valore arbitrario deciso
-        # dall'inizializzazione random dei pesi (poteva finire vicino a 0
-        # o vicino a 1 per puro caso) e con un gradiente debole (pochi
-        # parametri, base congelata) rischia di restare li' per tutto il
-        # training invece di imparare a variare per immagine.
+        # Otherwise, alpha starts from an arbitrary value determined
+        # by random weight initialization (possibly near 0
+        # or 1 by chance); with weak gradients (few
+        # parameters and a frozen base), it may remain there throughout
+        # training instead of learning image-specific variation.
         #
-        # Con l'ultimo layer a zero, il logit prima della sigmoid e'
-        # sempre 0 -> alpha parte esattamente a 0.5 per ogni immagine
-        # (peso neutro tra M1-L e il center prior), e il gradiente decide
-        # da li' come muoverlo, immagine per immagine.
+        # With a zeroed output layer, the pre-sigmoid logit is
+        # always 0, so alpha starts at exactly 0.5 for every image
+        # (neutral blend of M1-L and the center prior), and gradients determine
+        # how it moves for each image.
         # ---------------------------------------------
         nn.init.zeros_(self.gate[-2].weight)
         nn.init.zeros_(self.gate[-2].bias)
@@ -110,7 +110,7 @@ class AdaptiveCenterPriorG(nn.Module):
         return_alpha=False,
     ):
         # ---------------------------------------------
-        # Una sola estrazione delle feature.
+        # Extract features once.
         # ---------------------------------------------
         feats = self.base_model.encoder(x)
 
@@ -123,18 +123,18 @@ class AdaptiveCenterPriorG(nn.Module):
 
         base_raw = torch.sigmoid(logits)
 
-        # M1-L forward restituisce valori 0-1,
-        # mentre B0 e' gia' una probability map.
+        # M1-L forward returns values in [0, 1],
+        # while B0 is already a probability map.
         #
-        # Prima di combinarli li portiamo quindi
-        # sulla stessa scala: somma spaziale = 1.
+        # Normalize both before combining them
+        # to the same scale: spatial sum = 1.
         base_prob = to_probability_map(
             base_raw,
             eps=self.eps,
         )
 
         # ---------------------------------------------
-        # Calcolo alpha dall'informazione globale C5.
+        # Compute alpha from global C5 information.
         # ---------------------------------------------
         pooled = self.global_pool(
             feats["C5"]
@@ -154,8 +154,8 @@ class AdaptiveCenterPriorG(nn.Module):
         )
 
         # ---------------------------------------------
-        # B0 e' uguale per tutte le immagini,
-        # ma viene espanso alla dimensione del batch.
+        # B0 is identical for all images,
+        # but is expanded to the batch size.
         # ---------------------------------------------
         prior = self.center_prior(
             x.shape[0]
@@ -179,7 +179,7 @@ class AdaptiveCenterPriorG(nn.Module):
         x,
         eps=1e-6,
     ):
-        # forward() di G e' gia' una probability map.
+        # G.forward() already returns a probability map.
         return self.forward(x)
 
     def load_base_state_dict(

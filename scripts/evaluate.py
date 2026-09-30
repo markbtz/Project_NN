@@ -1,15 +1,15 @@
 """
-Evaluation CLI condivisa per B0, B1, M1, M1-L e G.
+Shared evaluation CLI for B0, B1, M1, M1-L, G, and M2.
 
-Prima versione:
-- valuta sul tuning set per default;
-- calcola CC / SIM / KLD per immagine;
-- calcola opzionalmente la validation loss del modello;
-- salva CSV per-image e JSON summary;
+Main behavior:
+- evaluates on the tuning split by default;
+- computes per-image CC / SIM / KLD;
+- optionally computes model validation loss;
+- saves a per-image CSV and a JSON summary;
 - supporta B0 tramite prediction_fn dedicata;
-- protegge internal_test: richiede --final_evaluation.
+- protects internal_test behind --final_evaluation.
 
-Esempi:
+Examples:
 
     python scripts/evaluate.py \
         --experiment B1 \
@@ -31,7 +31,7 @@ Esempi:
         --experiment G \
         --checkpoint_path /content/checkpoints/G_best.pt
 
-L'internal test resta congelato durante lo sviluppo. Per usarlo serve
+The internal test remains frozen during development. Using it requires
 esplicitamente:
 
     --split internal_test --final_evaluation
@@ -97,7 +97,7 @@ def load_model_for_evaluation(
     width,
 ):
     """
-    Costruisce il modello e carica il checkpoint.
+    Build the model and load the checkpoint.
 
     Ritorna:
         model,
@@ -109,7 +109,7 @@ def load_model_for_evaluation(
 
     if not os.path.exists(checkpoint_path):
         raise FileNotFoundError(
-            f"Checkpoint non trovato: {checkpoint_path}"
+            f"Checkpoint not found: {checkpoint_path}"
         )
 
     checkpoint = torch.load(
@@ -126,8 +126,8 @@ def load_model_for_evaluation(
             pretrained=False,
         ).to(device)
 
-        # train.py salva B0 direttamente come state_dict.
-        # Supportiamo anche un eventuale formato wrapped futuro.
+        # train.py saves B0 directly as a state_dict.
+        # Also support a future wrapped format.
         if (
             isinstance(checkpoint, dict)
             and "model_state" in checkpoint
@@ -169,7 +169,7 @@ def load_model_for_evaluation(
             or "model_state" not in checkpoint
         ):
             raise ValueError(
-                f"Checkpoint {experiment} non valido: "
+                f"Checkpoint {experiment} is invalid: "
                 "manca 'model_state'."
             )
 
@@ -177,10 +177,10 @@ def load_model_for_evaluation(
             "experiment"
         )
 
-        # I vecchi checkpoint B1 possono non avere questo campo.
-        # M1 e M1-L condividono l'architettura; G richiede comunque
-        # un checkpoint completo del proprio gate. Per tutti e tre
-        # il metadato experiment e' obbligatorio.
+        # Older B1 checkpoints may not contain this field.
+        # M1 and M1-L share the architecture; G still requires
+        # a complete checkpoint of their gate. For all three,
+        # experiment metadata is required.
         if (
             (
                 experiment in ("M1", "M1-L", "G", "M2")
@@ -193,7 +193,7 @@ def load_model_for_evaluation(
         ):
             raise ValueError(
                 "Checkpoint incompatibile: "
-                f"richiesto {experiment}, "
+                f"expected {experiment}, "
                 f"trovato experiment={checkpoint_experiment}."
             )
 
@@ -204,37 +204,37 @@ def load_model_for_evaluation(
         if experiment in ("M1-L", "G", "M2"):
             if loss_config["name"] != "cc_kld":
                 raise ValueError(
-                    f"{experiment} richiede loss cc_kld in experiments.yaml, "
+                    f"{experiment} requires cc_kld loss in experiments.yaml, "
                     f"trovata: {loss_config['name']}"
                 )
             if experiment_config["target"] != "density_map_prob":
                 raise ValueError(
-                    f"{experiment} richiede target density_map_prob."
+                    f"{experiment} requires density_map_prob target."
                 )
             if experiment == "G" and (
                 experiment_config.get("base_model") != "M1-L"
                 or experiment_config.get("center_prior") != "B0"
             ):
                 raise ValueError(
-                    "G richiede base_model M1-L e center_prior B0."
+                    "G requires base_model M1-L and center_prior B0."
                 )
-            # CC/SIM/KLD sono confrontabili anche prima di fissare i
-            # pesi della loss combinata. Non riportiamo MSE come loss
-            # per M1-L o G.
+            # CC/SIM/KLD remain comparable before fixing the
+            # combined-loss weights. Do not report MSE as the loss
+            # for M1-L or G.
             loss_fn = None
             loss_target_key = None
         else:
             if loss_config["name"] != "mse":
                 raise ValueError(
-                    f"{experiment} supporta attualmente solo loss MSE, "
+                    f"{experiment} currently supports only MSE loss, "
                     f"ma experiments.yaml contiene: "
                     f"{loss_config['name']}"
                 )
             loss_fn = nn.MSELoss()
             loss_target_key = experiment_config["target"]
 
-        # Il checkpoint contiene gia' i pesi dell'encoder: non serve
-        # scaricare di nuovo i pesi ImageNet durante la valutazione.
+        # The checkpoint already contains encoder weights; no need
+        # to download ImageNet weights again during evaluation.
         model = build_model(
             experiment,
             experiment_config,
@@ -271,7 +271,7 @@ def load_model_for_evaluation(
         )
 
     raise ValueError(
-        f"Esperimento non supportato: {experiment}"
+        f"Unsupported experiment: {experiment}"
     )
 
 
@@ -285,7 +285,7 @@ def save_evaluation_results(
     results_dir,
 ):
     """
-    Salva:
+    Save:
         results/<experiment>/<split>_per_image.csv
         results/<experiment>/<split>_summary.json
     """
@@ -381,9 +381,9 @@ def main():
         type=str,
         required=True,
         help=(
-            "Checkpoint da valutare. "
-            "Per B0: B0_center_map.pt. "
-            "Per B1/M1/M1-L/G/M2: preferibilmente <esperimento>_best.pt."
+            "Checkpoint to evaluate. "
+            "For B0: B0_center_map.pt. "
+            "For B1/M1/M1-L/G/M2: preferably <experiment>_best.pt."
         ),
     )
 
@@ -400,8 +400,8 @@ def main():
         "--final_evaluation",
         action="store_true",
         help=(
-            "Autorizza esplicitamente l'uso di internal_test. "
-            "Non usare durante sviluppo/tuning."
+            "Explicitly allow use of internal_test. "
+            "Do not use during development/tuning."
         ),
     )
 
@@ -450,7 +450,7 @@ def main():
     args = parser.parse_args()
 
     # -----------------------------------------------------
-    # Protezione internal test
+    # Protect internal_test.
     # -----------------------------------------------------
 
     if (
@@ -458,13 +458,13 @@ def main():
         and not args.final_evaluation
     ):
         parser.error(
-            "internal_test e' congelato durante lo sviluppo. "
-            "Per una valutazione finale esplicita usare "
+            "internal_test is frozen during development. "
+            "For an explicit final evaluation, use "
             "--final_evaluation."
         )
 
     # -----------------------------------------------------
-    # Configurazioni
+    # Configuration.
     # -----------------------------------------------------
 
     data_config = load_yaml_config(
@@ -624,7 +624,7 @@ def main():
     )
 
     # -----------------------------------------------------
-    # Modello / checkpoint
+    # Model / checkpoint
     # -----------------------------------------------------
 
     (
@@ -645,16 +645,16 @@ def main():
     # -----------------------------------------------------
     # Evaluation
     #
-    # Prima versione: CC / SIM / KLD.
-    # NSS e sAUC verranno aggiunti quando verra' fissato
-    # il protocollo delle fixation negative per sAUC.
+    # Core metrics: CC / SIM / KLD.
+    # NSS and sAUC can be enabled once the
+    # negative-fixation protocol for sAUC is fixed.
     # -----------------------------------------------------
 
-    # CC/SIM/KLD devono essere calcolate nello stesso
-    # probability space per tutti i modelli.
+    # Compute CC/SIM/KLD in the same
+    # probability space for all models.
     #
-    # B0 produce gia' direttamente una probability map.
-    # B1/M1/M1-L/G/M2 espongono invece il contratto
+    # B0 already produces a probability map.
+    # B1/M1/M1-L/G/M2 instead expose the raw/probability contract.
     # predict_probability().
     metric_prediction_fn = None
 

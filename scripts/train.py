@@ -1,30 +1,30 @@
 """
-Training loop per B0/B1/M1 (vedi configs/experiments.yaml).
+Training loop for B0/B1/M1 (see configs/experiments.yaml).
 
-Il training utilizza il dataset reale SALICON tramite SaliconDataset.
+Training uses the real SALICON dataset through SaliconDataset.
 
-B1 usa:
+B1 uses:
     density_map_raw
-    valori in [0,1]
-    loss MSE
+    values in [0, 1]
+    MSE loss
 
-B0 usa:
+B0 uses:
     density_map_prob
-    normalizzata a somma 1
+    normalized to sum to 1
 
-Le configurazioni condivise vengono lette da:
+Shared configuration is loaded from:
     configs/data.yaml
     configs/experiments.yaml
 
-Uso:
+Usage:
     python scripts/train.py --experiment B1
     python scripts/train.py --experiment B0
 
-Gli argomenti CLI --epochs, --batch_size, --height, --width,
---data_dir, --manifest_path e --dev_subset restano disponibili
-come override opzionali.
+CLI arguments --epochs, --batch_size, --height, --width,
+--data_dir, --manifest_path, and --dev_subset remain available
+as optional overrides.
 
-Su Colab, passare --checkpoint_dir sul path di Drive, es.:
+On Colab, set --checkpoint_dir to a Drive path, e.g.:
     python scripts/train.py --experiment B1 \
         --checkpoint_dir /content/drive/MyDrive/nndl-saliency/checkpoints
 """
@@ -95,7 +95,7 @@ DEFAULT_EXPERIMENTS_CONFIG = os.path.join(
 
 
 def load_g_base_state_dict(checkpoint_path, device):
-    """Carica solo una base che si dichiara esplicitamente M1-L."""
+    """Load a base checkpoint only if it is explicitly marked as M1-L."""
     checkpoint = torch.load(
         checkpoint_path,
         map_location=device,
@@ -111,13 +111,13 @@ def load_g_base_state_dict(checkpoint_path, device):
             else None
         )
         raise ValueError(
-            "Checkpoint base incompatibile per G: "
-            f"richiesto experiment=M1-L, trovato experiment={found}."
+            "Incompatible base checkpoint for G: "
+            f"expected experiment=M1-L, found experiment={found}."
         )
 
     if not isinstance(checkpoint.get("model_state"), dict):
         raise ValueError(
-            "Il checkpoint M1-L non contiene un 'model_state' valido."
+            "The M1-L checkpoint does not contain a valid 'model_state'."
         )
 
     return checkpoint["model_state"]
@@ -126,7 +126,7 @@ def load_g_base_state_dict(checkpoint_path, device):
 def train_mse_model(args, device, experiment_config):
     if args.experiment not in ("B1", "M1", "M1-L", "G", "M2"):
         raise ValueError(
-            f"Esperimento non supportato: {args.experiment}"
+            f"Unsupported experiment: {args.experiment}"
         )
 
     model = build_model(
@@ -143,14 +143,14 @@ def train_mse_model(args, device, experiment_config):
     )
 
     # -----------------------------------------------------
-    # Inizializzazione speciale di G.
+    # Special initialization for G.
     #
-    # Se G_last.pt non esiste ancora:
-    # - carica il best checkpoint M1-L
-    # - carica il center prior B0
+    # If G_last.pt does not exist yet:
+    # - load the best M1-L checkpoint
+    # - load the B0 center prior
     #
-    # Se G_last.pt esiste, il normale resume ripristinera'
-    # successivamente l'intero stato di G.
+    # If G_last.pt exists, normal resume restores
+    # the complete G state.
     # -----------------------------------------------------
     if (
         args.experiment == "G"
@@ -158,19 +158,19 @@ def train_mse_model(args, device, experiment_config):
     ):
         if args.base_checkpoint is None:
             raise ValueError(
-                "Per il primo training di G devi specificare "
+                "For the first G training run, specify "
                 "--base_checkpoint con M1-L_best.pt."
             )
 
         if args.center_prior_checkpoint is None:
             raise ValueError(
-                "Per il primo training di G devi specificare "
+                "For the first G training run, specify "
                 "--center_prior_checkpoint con B0_center_map.pt."
             )
 
         if not os.path.isfile(args.base_checkpoint):
             raise FileNotFoundError(
-                f"Checkpoint M1-L non trovato: "
+                f"M1-L checkpoint not found: "
                 f"{args.base_checkpoint}"
             )
 
@@ -178,7 +178,7 @@ def train_mse_model(args, device, experiment_config):
             args.center_prior_checkpoint
         ):
             raise FileNotFoundError(
-                f"Checkpoint B0 non trovato: "
+                f"B0 checkpoint not found: "
                 f"{args.center_prior_checkpoint}"
             )
 
@@ -213,7 +213,7 @@ def train_mse_model(args, device, experiment_config):
 
     if args.optimizer_name != "AdamW":
         raise ValueError(
-            f"{args.experiment} supporta attualmente solo optimizer AdamW, "
+            f"{args.experiment} currently supports only the AdamW optimizer, "
             f"ma experiments.yaml contiene: {args.optimizer_name}"
         )
 
@@ -260,15 +260,15 @@ def train_mse_model(args, device, experiment_config):
 
     else:
         raise ValueError(
-            f"Loss non supportata per {args.experiment}:"
+            f"Unsupported loss for {args.experiment}:"
             f"{args.loss_name}"
         )
 
     # -----------------------------------------------------
     # Dataset reale SALICON
     #
-    # Il target e' definito in configs/experiments.yaml.
-    # Per B1 deve essere density_map_raw.
+    # The target is defined in configs/experiments.yaml.
+    # B1 must use density_map_raw.
     # -----------------------------------------------------
 
     train_dataset = SaliconDataset(
@@ -284,14 +284,14 @@ def train_mse_model(args, device, experiment_config):
     )
 
     # -----------------------------------------------------
-    # Development subset opzionale
+    # Optional development subset.
     #
-    # Quando --dev_subset e' attivo, B1 usa un sottoinsieme
-    # deterministico del training set. La dimensione viene
-    # letta da data.yaml (dev_subset_n_train).
+    # With --dev_subset, B1 uses a deterministic
+    # training subset. Its size is read from
+    # read from data.yaml (dev_subset_n_train).
     #
-    # Usiamo un generatore locale con seed fisso per non
-    # alterare lo stato RNG globale usato da training e
+    # Use a local generator with a fixed seed to avoid
+    # changing the global RNG state used by training and
     # augmentation.
     # -----------------------------------------------------
 
@@ -300,8 +300,8 @@ def train_mse_model(args, device, experiment_config):
             train_dataset
         ):
             raise ValueError(
-                "dev_subset_n_train e' maggiore del numero "
-                "di campioni disponibili nel training set."
+                "dev_subset_n_train is greater than the number "
+                "of samples available in the training set."
             )
 
         dev_generator = torch.Generator()
@@ -322,8 +322,8 @@ def train_mse_model(args, device, experiment_config):
         )
 
         print(
-            f"[{args.experiment}] Development subset attivo: "
-            f"{len(train_dataset)} campioni"
+            f"[{args.experiment}] Development subset enabled: "
+            f"{len(train_dataset)} samples"
         )
 
     train_loader = DataLoader(
@@ -336,11 +336,11 @@ def train_mse_model(args, device, experiment_config):
     # -----------------------------------------------------
     # Tuning set
     #
-    # Nessuna augmentation: il tuning deve essere stabile
-    # e riproducibile tra epoche ed esperimenti.
+    # No augmentation: tuning must be deterministic.
+    # and reproducible across epochs and experiments.
     #
-    # La validation loss di B1 usa density_map_raw (MSE),
-    # mentre CC/SIM/KLD usano density_map_prob.
+    # B1 validation loss uses density_map_raw (MSE),
+    # while CC/SIM/KLD use density_map_prob.
     # -----------------------------------------------------
 
     tuning_dataset = SaliconDataset(
@@ -442,7 +442,7 @@ def train_mse_model(args, device, experiment_config):
         )
 
         print(
-            f"[{args.experiment}] Epoca "
+            f"[{args.experiment}] Epoch "
             f"{epoch + 1}/{args.epochs} "
             f"- train loss ({args.loss_name}): "
             f"{epoch_loss:.6e} "
@@ -450,7 +450,7 @@ def train_mse_model(args, device, experiment_config):
         )
 
         # -------------------------------------------------
-        # Validazione sul tuning set
+        # Validation on tuning set
         #
         # Loss:
         #   prediction raw vs density_map_raw -> MSE
@@ -459,8 +459,8 @@ def train_mse_model(args, device, experiment_config):
         #   prediction raw vs density_map_prob
         #   -> CC / SIM / KLD
         #
-        # evaluate_model usa reduction="none" e aggrega
-        # correttamente per immagine.
+        # evaluate_model uses reduction="none" and aggregates
+        # correctly on a per-image basis.
         # -------------------------------------------------
 
         validation = evaluate_model(
@@ -495,7 +495,7 @@ def train_mse_model(args, device, experiment_config):
             not in validation_summary
         ):
             raise ValueError(
-                "selection_metric non disponibile nel summary: "
+                "selection_metric is not available in the summary: "
                 f"{args.selection_metric}"
             )
 
@@ -505,7 +505,7 @@ def train_mse_model(args, device, experiment_config):
 
         if current_score is None:
             raise ValueError(
-                "La selection_metric scelta non ha un valore: "
+                "The selected selection_metric has no value: "
                 f"{args.selection_metric}"
             )
 
@@ -565,7 +565,7 @@ def train_mse_model(args, device, experiment_config):
             )
 
             print(
-                f"[{args.experiment}] Nuovo best checkpoint "
+                f"[{args.experiment}] New best checkpoint "
                 f"- {args.selection_metric}: "
                 f"{best_score:.6f}"
             )
@@ -576,27 +576,27 @@ def train_mse_model(args, device, experiment_config):
 
         if should_stop:
             print(
-                f"[{args.experiment}] Early stopping dopo "
+                f"[{args.experiment}] Early stopping after "
                 f"{early_stopping.epochs_without_improvement} "
-                f"epoche senza miglioramento."
+                f"epochs without improvement."
             )
             break
 
     print(
-        f"Training {args.experiment} completato. "
+        f"Training {args.experiment} completed. "
         f"Checkpoint in: {args.checkpoint_dir}"
     )
 
 
 def fit_b0(args, device, experiment_config):
     """
-    B0 non si allena via backprop.
+    B0 is not trained via backpropagation.
 
-    Calcola il center prior come media delle density_map_prob del training
-    set, in streaming (fit_from_loader): con 10.000 immagini, tenere tutte
-    le density map insieme in memoria costa circa 1.9 GB solo per quel
-    tensore. fit_from_loader accumula una somma incrementale, un batch alla
-    volta, senza mai avere tutto il dataset in RAM contemporaneamente.
+    Compute the center prior as the mean training-set density_map_prob using
+    streaming accumulation (fit_from_loader). With 10,000 images, keeping all
+    density maps in memory would require about 1.9 GB for that tensor alone.
+    fit_from_loader accumulates the sum batch by batch without loading the
+    entire dataset into RAM at once.
     """
 
     train_dataset = SaliconDataset(
@@ -653,8 +653,8 @@ def fit_b0(args, device, experiment_config):
     )
 
     print(
-        f"B0 (center prior) calcolato su "
-        f"{len(train_dataset)} mappe "
+        f"B0 (center prior) computed from "
+        f"{len(train_dataset)} maps "
         f"e salvato in {checkpoint_path}"
     )
 
@@ -672,14 +672,14 @@ def main():
         "--cc_weight",
         type=float,
         default=None,
-        help="Override opzionale del peso CC per la loss CC+KLD.",
+        help="Optional CC-weight override for the CC+KLD loss.",
     )
 
     parser.add_argument(
         "--kld_weight",
         type=float,
         default=None,
-        help="Override opzionale del peso KLD per la loss CC+KLD.",
+        help="Optional KLD-weight override for the CC+KLD loss.",
     )
 
     parser.add_argument(
@@ -687,8 +687,8 @@ def main():
         type=str,
         default=None,
         help=(
-            "Best checkpoint della base M1-L "
-            "usato per inizializzare G."
+            "Best checkpoint of the M1-L base model "
+            "used to initialize G."
         ),
     )
 
@@ -698,7 +698,7 @@ def main():
         default=None,
         help=(
             "Checkpoint B0_center_map.pt "
-            "usato per inizializzare G."
+            "used to initialize G."
         ),
     )
 
@@ -714,8 +714,8 @@ def main():
         default=DEFAULT_EXPERIMENTS_CONFIG,
     )
 
-    # Override opzionali da CLI.
-    # Se omessi, i valori vengono letti dai file YAML.
+    # Optional CLI overrides.
+    # If omitted, values are read from the YAML files.
     parser.add_argument(
         "--epochs",
         type=int,
@@ -757,7 +757,7 @@ def main():
         type=str,
         default="checkpoints",
         help=(
-            "Su Colab passare il path su Drive, es. "
+            "On Colab, provide a Drive path, e.g. "
             "/content/drive/MyDrive/"
             "nndl-saliency/checkpoints"
         ),
@@ -767,8 +767,8 @@ def main():
         "--dev_subset",
         action="store_true",
         help=(
-            "Usa il development subset del training set. "
-            "La dimensione e' letta da "
+            "Use the development subset of the training set. "
+            "Its size is read from "
             "data.yaml -> dev_subset_n_train."
         ),
     )
@@ -776,7 +776,7 @@ def main():
     args = parser.parse_args()
 
     # -----------------------------------------------------
-    # Caricamento configurazioni YAML
+    # Load YAML configuration.
     # -----------------------------------------------------
 
     data_config = load_yaml_config(
@@ -866,7 +866,7 @@ def main():
         "min",
     ):
         raise ValueError(
-            "selection_mode deve essere 'max' oppure 'min'."
+            "selection_mode must be either 'max' or 'min'."
         )
 
     if args.selection_metric not in (
@@ -876,7 +876,7 @@ def main():
         "kld",
     ):
         raise ValueError(
-            "selection_metric deve essere una tra: "
+            "selection_metric must be one of: "
             "loss, cc, sim, kld."
         )
 
@@ -937,7 +937,7 @@ def main():
     )
 
     # -----------------------------------------------------
-    # experiments.yaml -> esperimento selezionato
+    # experiments.yaml -> selected experiment
     # -----------------------------------------------------
 
     args.target_key = experiment_config[
@@ -969,8 +969,8 @@ def main():
             or args.kld_weight is None
         ):
             raise ValueError(
-                "Per la loss cc_kld devi specificare "
-                "cc_weight e kld_weight nel YAML "
+                "For the cc_kld loss, specify "
+                "cc_weight and kld_weight in the YAML "
                 "oppure tramite CLI."
             )
 
@@ -992,13 +992,13 @@ def main():
         )
 
     elif args.experiment == "G":
-        # G riceve i pesi dalla M1-L best.
-        # Non serve scaricare una nuova ResNet pretrained.
+        # G receives weights from the best M1-L checkpoint.
+        # No need to download another pretrained ResNet.
         args.pretrained = False
 
 
     # -----------------------------------------------------
-    # Protezione del protocollo B0
+    # Protect the B0 protocol.
     # -----------------------------------------------------
 
     if (
@@ -1006,12 +1006,12 @@ def main():
         and args.dev_subset
     ):
         raise ValueError(
-            "--dev_subset non e' previsto per B0: "
-            "il center prior va calcolato sul training set completo."
+            "--dev_subset is not supported for B0: "
+            "the center prior must be computed on the full training set."
         )
 
     # -----------------------------------------------------
-    # Riproducibilita' e riepilogo
+    # Reproducibility and summary
     # -----------------------------------------------------
 
     set_seed(

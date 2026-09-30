@@ -1,15 +1,16 @@
 import torch
+
 from src.saliency_maps import normalize_probability_map
 
 
 def _check_shapes(prediction: torch.Tensor, target: torch.Tensor) -> None:
     """
-    Controlla che prediction e target abbiano la stessa shape.
+    Check that prediction and target have the same shape.
     """
 
     if prediction.shape != target.shape:
         raise ValueError(
-            f"Shape diverse: prediction={prediction.shape}, "
+            f"Different shapes: prediction={prediction.shape}, "
             f"target={target.shape}"
         )
 
@@ -19,13 +20,13 @@ def _apply_reduction(
     reduction: str,
 ) -> torch.Tensor:
     """
-    Applica la reduction alle metriche calcolate per campione.
+    Apply reduction to per-sample metric values.
 
     reduction="mean":
-        restituisce la media del batch.
+        return the batch mean.
 
     reduction="none":
-        restituisce un valore per ogni elemento del batch.
+        return one value for each batch element.
     """
 
     if reduction == "mean":
@@ -35,17 +36,17 @@ def _apply_reduction(
         return values
 
     raise ValueError(
-        f"Reduction non supportata: {reduction}. "
-        "Usare 'mean' oppure 'none'."
+        f"Unsupported reduction: {reduction}. "
+        "Use 'mean' or 'none'."
     )
 
 
 def _flatten_batch(x: torch.Tensor) -> torch.Tensor:
     """
-    Converte le mappe nella forma [B, N],
-    dove B e' la batch size e N il numero di pixel.
+    Convert maps to shape [B, N],
+    where B is the batch size and N is the number of pixels.
 
-    Supporta:
+    Supports:
         [H, W]
         [1, H, W]
         [B, 1, H, W]
@@ -57,7 +58,7 @@ def _flatten_batch(x: torch.Tensor) -> torch.Tensor:
     elif x.ndim == 3:
         if x.shape[0] != 1:
             raise ValueError(
-                "Per input 3D e' richiesta shape [1, H, W]."
+                "3D input must have shape [1, H, W]."
             )
 
         x = x.unsqueeze(0)
@@ -65,13 +66,13 @@ def _flatten_batch(x: torch.Tensor) -> torch.Tensor:
     elif x.ndim == 4:
         if x.shape[1] != 1:
             raise ValueError(
-                "Per input 4D e' richiesta shape [B, 1, H, W]."
+                "4D input must have shape [B, 1, H, W]."
             )
 
     else:
         raise ValueError(
-            "Input non valido. Attese shape "
-            "[H,W], [1,H,W] oppure [B,1,H,W]."
+            "Invalid input. Expected shape "
+            "[H,W], [1,H,W] or [B,1,H,W]."
         )
 
     return x.flatten(start_dim=1)
@@ -82,7 +83,7 @@ def _normalize_distribution(
     eps: float = 1e-8,
 ) -> torch.Tensor:
     """
-    Normalizza ogni mappa affinché la somma dei pixel sia 1.
+    Normalize each map so that its pixel values sum to 1.
     """
 
     x = normalize_probability_map(
@@ -91,6 +92,7 @@ def _normalize_distribution(
     )
 
     return _flatten_batch(x)
+
 
 def cc(
     prediction: torch.Tensor,
@@ -101,18 +103,18 @@ def cc(
     """
     Correlation Coefficient (CC).
 
-    Misura la correlazione lineare tra prediction e target.
+    Measure linear correlation between prediction and target.
 
-    Valori:
-        1  -> correlazione perfetta
-        0  -> nessuna correlazione
-       -1  -> correlazione inversa
+    Values:
+        1  -> perfect correlation
+        0  -> no correlation
+       -1  -> inverse correlation
 
-    Più alto è meglio.
+    Higher is better.
 
     reduction:
-        "mean" -> media del batch (default)
-        "none" -> un valore per immagine
+        "mean" -> batch mean (default)
+        "none" -> one value per image
     """
 
     _check_shapes(prediction, target)
@@ -170,20 +172,20 @@ def sim(
     """
     Similarity Metric (SIM).
 
-    Le due mappe vengono normalizzate come distribuzioni
-    di probabilità.
+    The two maps are normalized as probability
+    distributions.
 
     SIM = sum(min(prediction, target))
 
-    Valori:
-        1 -> mappe identiche
-        0 -> nessuna sovrapposizione
+    Values:
+        1 -> identical maps
+        0 -> no overlap
 
-    Più alto è meglio.
+    Higher is better.
 
     reduction:
-        "mean" -> media del batch (default)
-        "none" -> un valore per immagine
+        "mean" -> batch mean (default)
+        "none" -> one value per image
     """
 
     _check_shapes(prediction, target)
@@ -218,31 +220,31 @@ def kld(
     """
     Kullback-Leibler Divergence.
 
-    Convenzione utilizzata:
+    Convention used:
 
         KLD(target || prediction)
 
-    cioè:
+    that is:
 
         sum(
             target * log(target / prediction)
         )
 
-    0 significa distribuzioni identiche.
-    Più basso è meglio.
+    0 means identical distributions.
+    Lower is better.
 
-    Nota sull'eps: il default (1e-6) e' allineato a
-    configs/data.yaml -> density_map_epsilon, lo stesso valore
-    gia' usato da kld_loss in src/losses/saliency_losses.py.
-    In produzione (scripts/evaluate.py) eps viene comunque
-    sempre passato esplicitamente da li' — questo default
-    serve solo a chi chiama kld() direttamente (es. i test),
-    per evitare di validare un comportamento diverso da quello
-    realmente usato in training/evaluation.
+    Note on eps: the default (1e-6) matches
+    configs/data.yaml -> density_map_epsilon, the same value
+    already used by kld_loss in src/losses/saliency_losses.py.
+
+    In production (scripts/evaluate.py), eps is explicitly
+    passed from there; this default only applies to direct
+    kld() calls (e.g. tests), to avoid validating behavior
+    different from what is actually used in training/evaluation.
 
     reduction:
-        "mean" -> media del batch (default)
-        "none" -> un valore per immagine
+        "mean" -> batch mean (default)
+        "none" -> one value per image
     """
 
     _check_shapes(prediction, target)
@@ -267,6 +269,7 @@ def kld(
         reduction,
     )
 
+
 def nss(
     prediction: torch.Tensor,
     fixation_coordinates,
@@ -278,46 +281,46 @@ def nss(
     Parameters
     ----------
     prediction : torch.Tensor
-        Saliency map prevista.
+        Predicted saliency map.
 
-        Shape supportate:
+        Supported shapes:
             [H, W]
             [1, H, W]
             [1, 1, H, W]
 
     fixation_coordinates : array-like
-        Coordinate delle fixation con shape [N, 2].
+        Fixation coordinates with shape [N, 2].
 
-        Ogni coordinata è:
+        Each coordinate is:
             [x, y]
 
-        Le coordinate devono essere già:
+        Coordinates must already be:
             - 0-based
-            - ridimensionate alla stessa risoluzione
-              della prediction.
+            - resized to the same resolution
+              as the prediction.
 
     eps : float
-        Valore utilizzato per stabilità numerica.
+        Value used for numerical stability.
 
     Returns
     -------
     torch.Tensor
-        NSS medio sulle fixation.
+        Mean NSS over fixations.
 
     Note
     ----
-    Più alto è meglio.
+    Higher is better.
 
-    NSS standardizza la saliency map:
+    NSS standardizes the saliency map:
 
         S_norm = (S - mean(S)) / std(S)
 
-    e calcola la media dei valori standardizzati
-    nelle posizioni fissate dagli osservatori.
+    and averages the standardized values
+    at observer fixation locations.
     """
 
     # ---------------------------------------------
-    # Portiamo prediction alla forma [H, W]
+    # Convert prediction to [H, W]
     # ---------------------------------------------
 
     pred = prediction.float()
@@ -326,8 +329,8 @@ def nss(
 
         if pred.shape[0] != 1 or pred.shape[1] != 1:
             raise ValueError(
-                "NSS accetta una singola saliency map. "
-                "Per input 4D è richiesta shape [1, 1, H, W]."
+                "NSS accepts a single saliency map. "
+                "4D input must have shape [1, 1, H, W]."
             )
 
         pred = pred[0, 0]
@@ -336,21 +339,21 @@ def nss(
 
         if pred.shape[0] != 1:
             raise ValueError(
-                "Per input 3D è richiesta shape [1, H, W]."
+                "3D input must have shape [1, H, W]."
             )
 
         pred = pred[0]
 
     elif pred.ndim != 2:
         raise ValueError(
-            "Prediction deve avere shape "
-            "[H,W], [1,H,W] oppure [1,1,H,W]."
+            "Prediction must have shape "
+            "[H,W], [1,H,W] or [1,1,H,W]."
         )
 
     height, width = pred.shape
 
     # ---------------------------------------------
-    # Coordinate fixation
+    # Fixation coordinates
     # ---------------------------------------------
 
     fix = torch.as_tensor(
@@ -361,19 +364,19 @@ def nss(
 
     if fix.ndim != 2 or fix.shape[1] != 2:
         raise ValueError(
-            "fixation_coordinates deve avere shape [N, 2]."
+            "fixation_coordinates must have shape [N, 2]."
         )
 
     if fix.shape[0] == 0:
         raise ValueError(
-            "NSS richiede almeno una fixation."
+            "NSS requires at least one fixation."
         )
 
     x = fix[:, 0]
     y = fix[:, 1]
 
     # ---------------------------------------------
-    # Controllo coordinate
+    # Validate coordinates
     # ---------------------------------------------
 
     if (
@@ -383,12 +386,12 @@ def nss(
         or torch.any(y >= height)
     ):
         raise ValueError(
-            "Sono presenti fixation fuori dai limiti "
-            "della saliency map."
+            "Some fixations are outside the bounds "
+            "of the saliency map."
         )
 
     # ---------------------------------------------
-    # Z-score della saliency map
+    # Z-score the saliency map.
     # ---------------------------------------------
 
     mean = pred.mean()
@@ -397,8 +400,8 @@ def nss(
         unbiased=False
     )
 
-    # Mappa costante:
-    # non contiene informazione spaziale.
+    # Constant map:
+    # contains no spatial information.
     if std < eps:
         return torch.zeros(
             (),
@@ -411,8 +414,8 @@ def nss(
     ) / (std + eps)
 
     # ---------------------------------------------
-    # Le fixation sono [x, y],
-    # mentre PyTorch indicizza [y, x]
+    # Fixations use [x, y] coordinates,
+    # while PyTorch indexes [y, x]
     # ---------------------------------------------
 
     fixation_values = normalized[
@@ -421,6 +424,7 @@ def nss(
     ]
 
     return fixation_values.mean()
+
 
 def sauc(
     prediction: torch.Tensor,
@@ -433,15 +437,15 @@ def sauc(
     Parameters
     ----------
     prediction : torch.Tensor
-        Saliency map prevista.
+        Predicted saliency map.
 
-        Shape supportate:
+        Supported shapes:
             [H, W]
             [1, H, W]
             [1, 1, H, W]
 
     fixation_coordinates : array-like
-        Fixation positive della stessa immagine.
+        Positive fixations from the same image.
 
         Shape:
             [N, 2]
@@ -450,8 +454,8 @@ def sauc(
             [x, y]
 
     negative_fixation_coordinates : array-like
-        Fixation provenienti da altre immagini,
-        utilizzate come campioni negativi.
+        Fixations from other images,
+        used as negative samples.
 
         Shape:
             [M, 2]
@@ -462,35 +466,35 @@ def sauc(
     Returns
     -------
     torch.Tensor
-        Valore sAUC.
+        sAUC value.
 
     Note
     ----
     Range:
-        0.0 -> pessimo
-        0.5 -> comportamento casuale
-        1.0 -> separazione perfetta
+        0.0 -> poor
+        0.5 -> random behavior
+        1.0 -> perfect separation
 
-    Più alto è meglio.
+    Higher is better.
 
-    Le coordinate devono essere già:
+    Coordinates must already be:
         - 0-based
-        - ridimensionate alla stessa risoluzione
-          della prediction.
+        - resized to the same resolution
+          as the prediction.
     """
 
     pred = prediction.float()
 
     # -----------------------------------------------------
-    # Portiamo prediction alla forma [H, W]
+    # Convert prediction to [H, W]
     # -----------------------------------------------------
 
     if pred.ndim == 4:
 
         if pred.shape[0] != 1 or pred.shape[1] != 1:
             raise ValueError(
-                "sAUC accetta una singola saliency map. "
-                "Per input 4D è richiesta shape [1, 1, H, W]."
+                "sAUC accepts a single saliency map. "
+                "4D input must have shape [1, 1, H, W]."
             )
 
         pred = pred[0, 0]
@@ -499,7 +503,7 @@ def sauc(
 
         if pred.shape[0] != 1:
             raise ValueError(
-                "Per input 3D è richiesta shape [1, H, W]."
+                "3D input must have shape [1, H, W]."
             )
 
         pred = pred[0]
@@ -507,14 +511,14 @@ def sauc(
     elif pred.ndim != 2:
 
         raise ValueError(
-            "Prediction deve avere shape "
-            "[H,W], [1,H,W] oppure [1,1,H,W]."
+            "Prediction must have shape "
+            "[H,W], [1,H,W] or [1,1,H,W]."
         )
 
     height, width = pred.shape
 
     # -----------------------------------------------------
-    # Coordinate positive
+    # Positive coordinates
     # -----------------------------------------------------
 
     positives = torch.as_tensor(
@@ -525,16 +529,16 @@ def sauc(
 
     if positives.ndim != 2 or positives.shape[1] != 2:
         raise ValueError(
-            "fixation_coordinates deve avere shape [N, 2]."
+            "fixation_coordinates must have shape [N, 2]."
         )
 
     if positives.shape[0] == 0:
         raise ValueError(
-            "sAUC richiede almeno una fixation positiva."
+            "sAUC requires at least one positive fixation."
         )
 
     # -----------------------------------------------------
-    # Coordinate negative
+    # Negative coordinates
     # -----------------------------------------------------
 
     negatives = torch.as_tensor(
@@ -546,16 +550,16 @@ def sauc(
     if negatives.ndim != 2 or negatives.shape[1] != 2:
         raise ValueError(
             "negative_fixation_coordinates "
-            "deve avere shape [M, 2]."
+            "must have shape [M, 2]."
         )
 
     if negatives.shape[0] == 0:
         raise ValueError(
-            "sAUC richiede almeno una fixation negativa."
+            "sAUC requires at least one negative fixation."
         )
 
     # -----------------------------------------------------
-    # Controllo coordinate
+    # Validate coordinates
     # -----------------------------------------------------
 
     pos_x = positives[:, 0]
@@ -580,20 +584,20 @@ def sauc(
 
     if positive_out_of_bounds:
         raise ValueError(
-            "Sono presenti fixation positive fuori "
-            "dai limiti della saliency map."
+            "Some positive fixations are outside "
+            "the saliency-map bounds."
         )
 
     if negative_out_of_bounds:
         raise ValueError(
-            "Sono presenti fixation negative fuori "
-            "dai limiti della saliency map."
+            "Some negative fixations are outside "
+            "the saliency-map bounds."
         )
 
     # -----------------------------------------------------
-    # Saliency nei punti positivi e negativi
+    # Saliency at positive and negative points
     #
-    # Coordinate = [x, y]
+    # Coordinates = [x, y]
     # Tensor      = [y, x]
     # -----------------------------------------------------
 
@@ -610,11 +614,11 @@ def sauc(
     # -----------------------------------------------------
     # AUC
     #
-    # Equivalentemente:
+    # Equivalently:
     #
-    # P(score positivo > score negativo)
+    # P(positive score > negative score)
     #
-    # In caso di parità assegniamo 0.5.
+    # Assign 0.5 to ties.
     # -----------------------------------------------------
 
     differences = (

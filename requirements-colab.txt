@@ -1,5 +1,5 @@
-# Colab ha già torch/torchvision/numpy/matplotlib preinstallati con supporto GPU.
-# Installiamo solo ciò che manca, per non rompere le versioni già presenti.
+# Colab already includes torch/torchvision/numpy/matplotlib with GPU support.
+# Install only the missing packages to avoid changing the preinstalled versions.
 timm
 kaggle
 pyyaml

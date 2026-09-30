@@ -22,7 +22,7 @@ def test_g_rejects_wrong_or_missing_base_experiment(tmp_path, experiment):
         checkpoint["experiment"] = experiment
     torch.save(checkpoint, path)
 
-    with pytest.raises(ValueError, match="richiesto experiment=M1-L"):
+    with pytest.raises(ValueError, match="expected experiment=M1-L"):
         load_g_base_state_dict(path, torch.device("cpu"))
 
 

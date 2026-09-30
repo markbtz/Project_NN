@@ -28,7 +28,7 @@ class SaliconDataset(Dataset):
         self.manifest_path = Path(manifest_path)
         self.split = split
 
-        # input_size è [width, height]
+        # input_size is [width, height]
         self.input_size = tuple(input_size)
 
         self.eps = float(density_map_epsilon)
@@ -39,12 +39,12 @@ class SaliconDataset(Dataset):
         if len(self.samples) == 0:
             raise ValueError(
                 f"Nessun campione trovato per split='{split}' "
-                f"nel manifest {manifest_path}"
+                f"in manifest {manifest_path}"
             )
 
         print(
             f"SaliconDataset split='{split}': "
-            f"{len(self.samples)} campioni"
+            f"{len(self.samples)} samples"
         )
 
     def _load_manifest(self):
@@ -65,8 +65,8 @@ class SaliconDataset(Dataset):
 
             if not required_columns.issubset(reader.fieldnames):
                 raise ValueError(
-                    f"Manifest non valido. "
-                    f"Colonne trovate: {reader.fieldnames}"
+                    f"Invalid manifest. "
+                    f"Columns found: {reader.fieldnames}"
                 )
 
             for row in reader:
@@ -86,7 +86,7 @@ class SaliconDataset(Dataset):
                 return candidate
 
         raise FileNotFoundError(
-            f"File non trovato per ID '{image_id}' in {directory}"
+            f"File not found for ID '{image_id}' in {directory}"
         )
 
     def _paths_for_sample(self, sample):
@@ -151,16 +151,16 @@ class SaliconDataset(Dataset):
 
     def _load_density_map(self, path):
         """
-        Restituisce due versioni della stessa density map:
+        Return two versions of the same density map:
 
         density_map_raw:
             valori in [0, 1]
-            usata principalmente con MSE
+            used mainly with MSE
 
         density_map_prob:
             valori >= 0
             somma totale = 1
-            usata per B0, SIM e KLD
+            used for B0, SIM, and KLD
         """
 
         density_map = Image.open(path).convert("L")
@@ -178,8 +178,8 @@ class SaliconDataset(Dataset):
         # -------------------------------------------------
         # RAW MAP
         #
-        # PIL grayscale produce valori 0...255.
-        # Li portiamo nell'intervallo [0,1].
+        # PIL grayscale values are in [0, 255].
+        # Scale them to [0, 1].
         # -------------------------------------------------
 
         density_map_raw = density_map / 255.0
@@ -197,8 +197,8 @@ class SaliconDataset(Dataset):
         # -------------------------------------------------
         # PROBABILITY MAP
         #
-        # Partiamo dalla raw map e la normalizziamo
-        # affinché la somma dei pixel sia 1.
+        # Normalize the raw map
+        # so pixel values sum to 1.
         # -------------------------------------------------
         density_map_prob = normalize_probability_map(
             density_map_raw,
@@ -230,8 +230,8 @@ class SaliconDataset(Dataset):
             map_path
         )
 
-        # Flip sincronizzato:
-        # immagine + entrambe le density map.
+        # Synchronized flip:
+        # image + both density-map representations.
         if self.augmentation and random.random() < 0.5:
             image = torch.flip(
                 image,

@@ -4,7 +4,7 @@ import sys
 import torch
 
 
-# Permette di importare src quando eseguiamo pytest
+# Allow importing src when running pytest
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
@@ -13,10 +13,10 @@ from src.metrics import cc, sim, kld, nss, sauc
 
 def test_identical_maps():
     """
-    Se prediction e target sono identiche:
-    CC deve essere circa 1
-    SIM deve essere circa 1
-    KLD deve essere circa 0
+    If prediction and target are identical:
+    CC should be approximately 1
+    SIM should be approximately 1
+    KLD should be approximately 0
     """
 
     target = torch.tensor(
@@ -58,8 +58,8 @@ def test_identical_maps():
 
 def test_different_maps():
     """
-    Due mappe diverse non devono ottenere
-    i valori ideali delle metriche.
+    Different maps must not achieve
+    ideal metric values.
     """
 
     target = torch.tensor(
@@ -97,8 +97,8 @@ def test_different_maps():
 
 def test_batch_metrics():
     """
-    Verifica che le metriche funzionino anche
-    su un batch con più elementi.
+    Check that the metrics also work
+    on a batch with multiple elements.
     """
 
     target = torch.tensor(
@@ -142,8 +142,8 @@ def test_batch_metrics():
 
 def test_metrics_are_finite():
     """
-    Le metriche non devono produrre NaN o Inf
-    su mappe valide.
+    Metrics must not produce NaN or Inf
+    on valid maps.
     """
 
     target = torch.rand(
@@ -171,7 +171,7 @@ def test_metrics_are_finite():
 
 def test_sim_range():
     """
-    SIM deve rimanere tra 0 e 1.
+    SIM must remain between 0 and 1.
     """
 
     target = torch.rand(
@@ -196,8 +196,8 @@ def test_sim_range():
 
 def test_wrong_shapes_raise_error():
     """
-    Prediction e target con shape diverse
-    devono generare un errore.
+    Prediction and target with different shapes
+    must raise an error.
     """
 
     target = torch.rand(
@@ -227,8 +227,8 @@ def test_wrong_shapes_raise_error():
 
 def test_nss_high_saliency_at_fixation():
     """
-    NSS deve essere positivo quando la fixation cade
-    nella zona con saliency più alta.
+    NSS should be positive when the fixation falls
+    in the highest-saliency region.
     """
 
     prediction = torch.tensor(
@@ -240,7 +240,7 @@ def test_nss_high_saliency_at_fixation():
         dtype=torch.float32,
     )
 
-    # x=1, y=1 -> centro della mappa
+    # x=1, y=1 -> map center
     fixations = [
         [1, 1]
     ]
@@ -256,8 +256,8 @@ def test_nss_high_saliency_at_fixation():
 
 def test_nss_low_saliency_at_fixation():
     """
-    NSS deve essere negativo quando la fixation cade
-    in una zona meno saliente rispetto alla media.
+    NSS should be negative when the fixation falls
+    in a region less salient than the mean.
     """
 
     prediction = torch.tensor(
@@ -269,7 +269,7 @@ def test_nss_low_saliency_at_fixation():
         dtype=torch.float32,
     )
 
-    # x=0, y=0 -> zona non saliente
+    # x=0, y=0 -> non-salient region
     fixations = [
         [0, 0]
     ]
@@ -285,8 +285,8 @@ def test_nss_low_saliency_at_fixation():
 
 def test_nss_constant_map():
     """
-    Una mappa completamente costante non contiene
-    informazione spaziale e deve restituire NSS = 0.
+    A completely constant map contains no
+    spatial information and should return NSS = 0.
     """
 
     prediction = torch.ones(
@@ -314,10 +314,10 @@ def test_nss_constant_map():
 
 def test_sauc_perfect_separation():
     """
-    Le fixation positive cadono su saliency alta,
-    quelle negative su saliency bassa.
+    Positive fixations fall on high saliency,
+    while negative fixations fall on low saliency.
 
-    sAUC deve essere 1.
+    sAUC should be 1.
     """
 
     prediction = torch.tensor(
@@ -355,10 +355,10 @@ def test_sauc_perfect_separation():
 
 def test_sauc_wrong_separation():
     """
-    Le fixation positive cadono su saliency bassa
-    mentre le negative cadono sulla saliency massima.
+    Positive fixations fall on low saliency
+    while negative fixations fall on maximum saliency.
 
-    sAUC deve essere 0.
+    sAUC should be 0.
     """
 
     prediction = torch.tensor(
@@ -393,8 +393,8 @@ def test_sauc_wrong_separation():
 
 def test_sauc_ties():
     """
-    Se positivi e negativi hanno esattamente
-    la stessa saliency, l'AUC deve essere 0.5.
+    If positive and negative samples have exactly
+    the same saliency, AUC should be 0.5.
     """
 
     prediction = torch.ones(
@@ -428,8 +428,8 @@ def test_sauc_ties():
 
 def test_reduction_none_returns_one_value_per_sample():
     """
-    CC/SIM/KLD con reduction="none" devono restituire
-    un valore per ogni elemento del batch.
+    CC/SIM/KLD with reduction="none" must return
+    one value for each batch element.
     """
 
     target = torch.rand(
@@ -475,8 +475,8 @@ def test_reduction_none_returns_one_value_per_sample():
 
 def test_reduction_mean_matches_none_mean():
     """
-    Il comportamento di default deve coincidere con
-    la media dei valori per immagine.
+    Default behavior must match
+    the mean of per-image values.
     """
 
     target = torch.rand(
@@ -514,7 +514,7 @@ def test_reduction_mean_matches_none_mean():
 
 def test_invalid_reduction_raises_error():
     """
-    Una reduction non supportata deve fallire esplicitamente.
+    An unsupported reduction must fail explicitly.
     """
 
     target = torch.rand(
@@ -544,15 +544,15 @@ def test_invalid_reduction_raises_error():
 
         else:
             raise AssertionError(
-                "La metrica avrebbe dovuto generare ValueError "
-                "per una reduction non valida."
+                "The metric should have raised ValueError "
+                "for an invalid reduction."
             )
 
 
 def test_reduction_none_supports_single_2d_map():
     """
-    Una singola saliency map [H, W] deve essere supportata
-    anche con reduction="none".
+    A single saliency map [H, W] must be supported
+    also with reduction="none".
     """
 
     target = torch.tensor(
@@ -577,8 +577,8 @@ def test_reduction_none_supports_single_2d_map():
 
 def test_reduction_none_preserves_sample_scores():
     """
-    reduction="none" deve conservare il valore associato
-    a ciascun elemento del batch, senza mediare i campioni.
+    reduction="none" must preserve the value associated
+    with each batch element, without averaging samples.
     """
 
     target = torch.tensor(

@@ -31,7 +31,7 @@ x = torch.rand(
     device=device,
 )
 
-# Controllo feature ResNet18
+# Check ResNet18 features.
 with torch.no_grad():
     feats = model.encoder(x)
 

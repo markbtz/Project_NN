@@ -1,5 +1,5 @@
 """
-Utility condivise per il salvataggio e il caricamento dei checkpoint.
+Shared utilities for saving and loading checkpoints.
 """
 
 import os
@@ -9,7 +9,7 @@ import torch
 
 def initial_best_score(selection_mode):
     """
-    Valore iniziale per la selezione del best checkpoint.
+    Initial value used for best-checkpoint selection.
     """
 
     if selection_mode == "max":
@@ -19,7 +19,7 @@ def initial_best_score(selection_mode):
         return float("inf")
 
     raise ValueError(
-        "selection_mode deve essere 'max' oppure 'min'."
+        "selection_mode must be 'max' or 'min'."
     )
 
 
@@ -29,8 +29,8 @@ def is_better(
     selection_mode,
 ):
     """
-    Confronta lo score corrente con il best score secondo
-    la direzione definita in experiments.yaml.
+    Compare the current score with the best score according to
+    the direction defined in experiments.yaml.
     """
 
     if selection_mode == "max":
@@ -40,7 +40,7 @@ def is_better(
         return current_score < best_score
 
     raise ValueError(
-        "selection_mode deve essere 'max' oppure 'min'."
+        "selection_mode must be 'max' or 'min'."
     )
 
 
@@ -88,18 +88,18 @@ def load_training_checkpoint(
     selection_mode="max",
 ):
     """
-    Ritorna (epoca_di_partenza, best_score).
+    Return (start_epoch, best_score).
 
-    Se non c'e' checkpoint, riparte da zero usando il valore
-    iniziale coerente con selection_mode.
+    If no checkpoint exists, start from scratch using the
+    initial value consistent with selection_mode.
 
-    I vecchi checkpoint basati su best_loss non vengono riutilizzati:
-    la selezione del best model ora avviene sul tuning set e quindi
-    rappresenta un protocollo diverso.
+    Legacy checkpoints based on best_loss are not reused:
+    best-model selection now uses the tuning set and therefore
+    follows a different protocol.
 
-    Fondamentale su Colab: una sessione puo'
-    disconnettersi in qualunque momento, questo evita
-    di ripartire da capo ogni volta.
+    Important on Colab: a session may
+    disconnect at any time; this prevents
+    having to restart from scratch.
     """
 
     initial_score = initial_best_score(
@@ -116,9 +116,9 @@ def load_training_checkpoint(
 
     if "best_score" not in ckpt:
         raise ValueError(
-            "Checkpoint legacy non compatibile: contiene best_loss "
-            "ma non best_score. Rimuovere o rinominare B1_last.pt "
-            "e ripartire con il nuovo protocollo di validazione."
+            "Incompatible legacy checkpoint: contains best_loss "
+            "but not best_score. Remove or rename B1_last.pt "
+            "and restart with the new validation protocol."
         )
 
     if (
@@ -126,7 +126,7 @@ def load_training_checkpoint(
         != selection_metric
     ):
         raise ValueError(
-            "Il checkpoint usa una selection_metric diversa: "
+            "Checkpoint uses a different selection_metric: "
             f"{ckpt.get('selection_metric')} != {selection_metric}."
         )
 
@@ -135,7 +135,7 @@ def load_training_checkpoint(
         != selection_mode
     ):
         raise ValueError(
-            "Il checkpoint usa una selection_mode diversa: "
+            "Checkpoint uses a different selection_mode: "
             f"{ckpt.get('selection_mode')} != {selection_mode}."
         )
 
@@ -152,8 +152,8 @@ def load_training_checkpoint(
         )
 
     print(
-        f"Checkpoint ripreso da {path} "
-        f"(epoca {ckpt['epoch']}, "
+        f"Resumed checkpoint from {path} "
+        f"(epoch {ckpt['epoch']}, "
         f"best {selection_metric} "
         f"{ckpt['best_score']:.6f})"
     )

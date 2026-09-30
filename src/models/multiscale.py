@@ -9,10 +9,10 @@ from src.models.baseline import (
 
 class MultiScaleDecoder(nn.Module):
     """
-    Decoder M1.
+    M1 decoder.
 
-    Mantiene il piu' possibile la struttura del decoder B1,
-    aggiungendo skip connections da C4 e C3.
+    Preserves the B1 decoder structure as much as possible,
+    while adding skip connections from C4 and C3.
 
     B1:
         C5 -> up -> up -> up -> up -> up -> output
@@ -25,10 +25,10 @@ class MultiScaleDecoder(nn.Module):
         super().__init__()
 
         # -------------------------------------------------
-        # C5 -> risoluzione C4
+        # C5 -> C4 resolution
         #
-        # Come primo blocco del decoder B1:
-        # 512 canali -> 96 canali
+        # Same structure as the first B1 decoder block:
+        # 512 channels -> 96 channels
         # -------------------------------------------------
         self.up_c5_to_c4 = nn.Sequential(
             nn.Upsample(
@@ -45,8 +45,8 @@ class MultiScaleDecoder(nn.Module):
             nn.ReLU(inplace=True),
         )
 
-        # C4 ha 256 canali.
-        # La proiettiamo a 96 per poterla sommare a x.
+        # C4 has 256 channels.
+        # Project to 96 channels before adding to x.
         self.proj_c4 = nn.Conv2d(
             channels["C4"],
             width,
@@ -54,10 +54,10 @@ class MultiScaleDecoder(nn.Module):
         )
 
         # -------------------------------------------------
-        # C4 -> risoluzione C3
+        # C4 -> C3 resolution
         #
-        # Come secondo blocco del decoder B1:
-        # 96 -> 48 canali
+        # Same structure as the second B1 decoder block:
+        # 96 -> 48 channels
         # -------------------------------------------------
         self.up_c4_to_c3 = nn.Sequential(
             nn.Upsample(
@@ -74,8 +74,8 @@ class MultiScaleDecoder(nn.Module):
             nn.ReLU(inplace=True),
         )
 
-        # C3 ha 128 canali.
-        # La proiettiamo a 48.
+        # C3 has 128 channels.
+        # Project to 48 channels.
         self.proj_c3 = nn.Conv2d(
             channels["C3"],
             width // 2,
@@ -83,10 +83,10 @@ class MultiScaleDecoder(nn.Module):
         )
 
         # -------------------------------------------------
-        # Parte finale uguale concettualmente a B1
+        # Final part conceptually identical to B1
         #
         # 48 -> 24 -> 12 -> 12
-        # con tre upsampling x2.
+        # followed by three 2x upsampling blocks.
         # -------------------------------------------------
         self.tail = nn.Sequential(
             nn.Upsample(
@@ -142,17 +142,17 @@ class MultiScaleDecoder(nn.Module):
         c5,
         output_size,
     ):
-        # C5: circa 6x8
-        # -> circa 12x16, stessa risoluzione di C4
+        # C5: approximately 6x8
+        # -> about 12x16, matching C4 resolution
         x = self.up_c5_to_c4(c5)
 
-        # Skip connection C4
+        # C4 skip connection
         x = x + self.proj_c4(c4)
 
-        # -> circa 24x32, stessa risoluzione di C3
+        # -> about 24x32, matching C3 resolution
         x = self.up_c4_to_c3(x)
 
-        # Skip connection C3
+        # C3 skip connection
         x = x + self.proj_c3(c3)
 
         # 24x32 -> 48x64 -> 96x128 -> 192x256
@@ -160,7 +160,7 @@ class MultiScaleDecoder(nn.Module):
 
         x = self.head(x)
 
-        # Sicurezza per eventuali dimensioni non divisibili esattamente
+        # Handle dimensions that are not exactly divisible.
         if tuple(x.shape[-2:]) != tuple(output_size):
             x = nn.functional.interpolate(
                 x,
@@ -175,14 +175,14 @@ class MultiScaleDecoder(nn.Module):
 class M1MultiScale(nn.Module):
     """
     M1:
-    ResNet18 + feature multi-scala C3/C4/C5.
+    ResNet18 + C3/C4/C5 multi-scale features.
 
-    Rispetto a B1:
-    - stesso encoder ResNet18
-    - stessa MSE
-    - stesso target density_map_raw
-    - decoder simile
-    - aggiunge skip connection da C4 e C3
+    Compared to B1:
+    - same ResNet18 encoder
+    - same MSE
+    - same density_map_raw target
+    - similar decoder
+    - adds skip connections from C4 and C3
     """
 
     def __init__(

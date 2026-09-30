@@ -12,15 +12,15 @@ dependencies:
   - pyyaml
   - tqdm
   - pip:
-      # numpy va qui insieme a torch/torchvision/opencv, NON tra le dipendenze
-      # conda sopra: cosi' pip risolve tutte queste versioni insieme in un solo
-      # passaggio, evitando il disallineamento numpy/torch visto in pratica
-      # (torch compilato contro un ABI numpy diverso da quello installato da conda).
+      # Keep numpy here with torch/torchvision/opencv, NOT among the conda dependencies
+      # above: this lets pip resolve all these versions together in a single
+      # step, avoiding the numpy/torch mismatch observed in practice
+      # (torch compiled against a NumPy ABI different from the one installed by conda).
       - numpy
       - torch
       - torchvision
-      # su Apple Silicon torch usa il backend "mps" automaticamente se disponibile
-      - timm            # backbone pretrained leggeri (ViT-Tiny/DeiT-Tiny per il task Advanced)
+      # on Apple Silicon, torch automatically uses the "mps" backend when available
+      - timm            # lightweight pretrained backbones (ViT-Tiny/DeiT-Tiny for the Advanced task)
       - kaggle          # download dataset
       - opencv-python-headless
       - pytest

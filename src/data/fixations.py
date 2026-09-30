@@ -6,12 +6,12 @@ from scipy.io import loadmat
 
 def load_salicon_fixations(mat_path):
     """
-    Legge un file .mat di fixation SALICON.
+    Reads a SALICON coordinates fixation .mat file.
 
-    Le coordinate SALICON sono memorizzate come:
+    SALICON coordinates are stored as:
         (x, y)
 
-    e sono 1-based:
+    and are 1-based:
         x = 1 ... width
         y = 1 ... height
 
@@ -22,14 +22,14 @@ def load_salicon_fixations(mat_path):
         di tutti gli osservatori.
 
     original_size : tuple
-        (height, width) dell'immagine originale.
+        (height, width) of the original image.
     """
 
     mat_path = Path(mat_path)
 
     if not mat_path.exists():
         raise FileNotFoundError(
-            f"Fixation file non trovato: {mat_path}"
+            f"Fixation file not found: {mat_path}"
         )
 
     data = loadmat(
@@ -42,15 +42,15 @@ def load_salicon_fixations(mat_path):
 
     if "gaze" not in data:
         raise KeyError(
-            f"Campo 'gaze' non trovato in {mat_path}"
+            f"Field 'gaze' not found in {mat_path}"
         )
 
     if "resolution" not in data:
         raise KeyError(
-            f"Campo 'resolution' non trovato in {mat_path}"
+            f"Field 'resolution' not found in {mat_path}"
         )
 
-    # SALICON salva:
+    # SALICON stores:
     # resolution = [height, width]
     resolution = np.asarray(
         data["resolution"]
@@ -58,7 +58,7 @@ def load_salicon_fixations(mat_path):
 
     if resolution.size != 2:
         raise ValueError(
-            f"Resolution non valida: {resolution}"
+            f"Invalid resolution: {resolution}"
         )
 
     original_height = int(resolution[0])
@@ -68,7 +68,7 @@ def load_salicon_fixations(mat_path):
 
     if "fixations" not in gaze.dtype.names:
         raise KeyError(
-            f"Campo 'fixations' non trovato in gaze: "
+            f"Field 'fixations' not found in gaze: "
             f"{gaze.dtype.names}"
         )
 
@@ -86,7 +86,7 @@ def load_salicon_fixations(mat_path):
 
         if fix.ndim != 2 or fix.shape[1] != 2:
             raise ValueError(
-                f"Formato fixation inatteso: {fix.shape}"
+                f"Formato fixation inexpected: {fix.shape}"
             )
 
         all_fixations.append(
@@ -117,21 +117,21 @@ def resize_fixations(
     target_size=(192, 256),
 ):
     """
-    Converte e ridimensiona coordinate fixation SALICON.
+    Converts and resizes SALICON fixation coordinates.
 
-    SALICON usa coordinate 1-based.
-    PyTorch/Python usa coordinate 0-based.
+    SALICON uses 1-based coordinates.
+    PyTorch/Python uses 0-based coordinates.
 
     Parameters
     ----------
     fixations : np.ndarray
-        Array [N, 2] con coordinate (x, y) SALICON.
+        Array [N, 2] with coordinates (x, y) SALICON.
 
     original_size : tuple
-        (height, width) originale.
+        (height, width) original.
 
     target_size : tuple
-        (height, width) finale.
+        (height, width) final.
 
         Default:
             (192, 256)
@@ -139,8 +139,8 @@ def resize_fixations(
     Returns
     -------
     np.ndarray
-        Coordinate (x, y) 0-based e ridimensionate,
-        con shape [N, 2].
+        Coordinate (x, y) 0-based and resized,
+        with shape [N, 2].
     """
 
     fixations = np.asarray(
@@ -156,7 +156,7 @@ def resize_fixations(
 
     if fixations.ndim != 2 or fixations.shape[1] != 2:
         raise ValueError(
-            "fixations deve avere shape [N, 2]"
+            "fixations must have shape [N, 2]"
         )
 
     original_height, original_width = original_size
@@ -175,7 +175,7 @@ def resize_fixations(
     x = fixations[:, 0] - 1.0
     y = fixations[:, 1] - 1.0
 
-    # Resize delle coordinate
+    # Resize coordinates
     x = np.floor(
         x * target_width / original_width
     ).astype(np.int64)
@@ -184,7 +184,7 @@ def resize_fixations(
         y * target_height / original_height
     ).astype(np.int64)
 
-    # Protezione dai bordi
+    # Clamp to image boundaries
     x = np.clip(
         x,
         0,
@@ -216,7 +216,7 @@ def load_and_resize_fixations(
         ↓
     conversione 1-based → 0-based
         ↓
-    resize alle dimensioni della rete
+    resize to the network dimensions
     """
 
     fixations, original_size = load_salicon_fixations(

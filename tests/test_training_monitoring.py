@@ -326,11 +326,6 @@ def test_early_stopping_resumes_from_history():
     )
 
 def test_training_history_save_csv_is_atomic_no_leftover_tmp(tmp_path):
-    """
-    save_csv scrive su un file temporaneo nella stessa directory e lo
-    sostituisce con os.replace(): dopo una scrittura riuscita non deve
-    restare alcun file temporaneo residuo.
-    """
     history = TrainingHistory()
 
     history.add_epoch(
@@ -357,11 +352,7 @@ def test_training_history_save_csv_is_atomic_no_leftover_tmp(tmp_path):
 def test_training_history_save_csv_preserves_previous_file_on_crash(
     tmp_path, monkeypatch
 ):
-    """
-    Se os.replace() fallisce a meta' del salvataggio (es. una
-    disconnessione Colab), il file CSV precedente deve restare
-    intatto — mai un file troncato/corrotto al posto di quello valido.
-    """
+    
     import os as os_module
 
     csv_path = tmp_path / "history.csv"

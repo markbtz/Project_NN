@@ -1,43 +1,36 @@
-# Evaluation Protocol
+# Evaluation protocol
 
-## Metriche principali
+## Primary metrics
 
-Il protocollo di valutazione principale utilizza:
+The main evaluation protocol uses:
 
-- CC (Correlation Coefficient)
-- SIM (Similarity)
-- KLD (Kullback-Leibler Divergence)
+- CC
+- SIM
+- KLD
 
-Queste tre metriche devono essere riportate per tutti i modelli
-confrontati nel percorso sperimentale principale.
+These three metrics must be reported for every model in the main experimental pipeline.
 
-## Metriche fixation-based
+## Optional metrics
 
-NSS e sAUC restano implementate nel progetto ma non fanno parte
-del percorso critico della valutazione principale.
+NSS and sAUC remain implemented in the project but are not part of the critical path for the main evaluation.
 
-- NSS: opzionale, da includere se il tempo disponibile lo consente.
-- sAUC: opzionale, salvo richiesta esplicita del corso o decisione
-  successiva del team.
+- NSS: optional; include it if time allows.
+- sAUC: optional unless explicitly required by the course or later selected by the team.
 
-Le implementazioni esistenti di NSS e sAUC non devono essere rimosse.
+The existing NSS and sAUC implementations must not be removed.
 
-## Split di valutazione
+## Evaluation split
 
-Durante sviluppo, debugging e selezione dei modelli viene utilizzato
-esclusivamente lo split `tuning`.
+During development, debugging, and model selection, use only the `tuning` split.
 
-Lo split `internal_test` resta congelato fino al freeze definitivo
-di architetture, loss e protocollo sperimentale.
+The `internal_test` split remains frozen until architectures, losses, and the experimental protocol are finalized.
 
-L'accesso a `internal_test` richiede una valutazione finale esplicita.
+Access to `internal_test` requires an explicit final evaluation.
 
-## Regola di confronto
+## Comparison rule
 
-I confronti per-image tra modelli devono essere effettuati tramite
-`image_id`.
+Per-image model comparisons must be performed using `image_id` alignment.
 
-Non è consentito assumere che due CSV siano allineati semplicemente
-in base all'ordine delle righe.
+Do not assume that two CSV files are aligned simply because their rows have the same order.
 
-ID mancanti o duplicati devono essere segnalati come errore.
+Missing or duplicate IDs must raise an error.

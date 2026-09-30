@@ -30,7 +30,7 @@ def _check_same_shape(
 ) -> None:
     if prediction.shape != target.shape:
         raise ValueError(
-            "prediction e target devono avere la stessa shape: "
+            "prediction and target must have the same shape: "
             f"{tuple(prediction.shape)} != {tuple(target.shape)}"
         )
 
@@ -41,8 +41,8 @@ def mse_loss(
     """
     Mean Squared Error.
 
-    Usata da B1 e M1 con:
-        prediction: output raw del modello in [0, 1]
+    Used by B1 and M1 with:
+        prediction: raw model output in [0, 1]
         target: density_map_raw
     """
     _check_same_shape(
@@ -66,14 +66,14 @@ def cc_loss(
 
         CC-loss = 1 - CC
 
-    CC viene calcolato separatamente per ogni elemento del batch
+    CC is computed independently for each batch item
     e poi mediato.
 
     Valore ideale:
         0  (CC = 1)
 
-    Per mappe costanti la correlazione non e' matematicamente definita;
-    eps mantiene il calcolo numericamente stabile e produce una loss finita.
+    For constant maps, correlation is mathematically undefined;
+    eps keeps the computation numerically stable and the loss finite.
     """
     _check_same_shape(
         prediction,
@@ -81,7 +81,7 @@ def cc_loss(
     )
 
     if eps <= 0:
-        raise ValueError("eps deve essere > 0.")
+        raise ValueError("eps must be > 0.")
 
     pred = prediction.flatten(
         start_dim=1
@@ -157,12 +157,12 @@ def kld_loss(
     eps: float = 1e-6,
 ) -> torch.Tensor:
     """
-    Kullback-Leibler Divergence con la convenzione del progetto:
+    Kullback-Leibler divergence using the project convention:
 
         KLD(target || prediction)
 
-    Prediction e target vengono normalizzati internamente come
-    distribuzioni di probabilita'.
+    Prediction and target are internally normalized as
+    probability distributions.
 
     Valore ideale:
         0
@@ -198,7 +198,7 @@ def kld_loss(
         dim=(-2, -1)
     )
 
-    # Media anche su eventuale dimensione canale.
+    # Also average over the channel dimension, if present.
     return per_sample.mean()
 
 
@@ -210,33 +210,32 @@ def cc_kld_loss(
     eps: float = 1e-6,
 ) -> torch.Tensor:
     """
-    Loss combinata per M1-L / G / M2:
+    Combined loss for M1-L / G / M2:
 
         total = cc_weight * CC-loss
               + kld_weight * KLD(target || prediction)
 
-    I pesi sono obbligatori intenzionalmente.
-    In configs/experiments.yaml restano null finche' non vengono scelti
-    sul tuning set.
+    The weights are intentionally required.
+    Values in configs/experiments.yaml remain null until selected in the tuning set
     """
     if cc_weight is None:
         raise ValueError(
-            "cc_weight non puo' essere None."
+            "cc_weight cannot be None."
         )
 
     if kld_weight is None:
         raise ValueError(
-            "kld_weight non puo' essere None."
+            "kld_weight cannot be None."
         )
 
     if cc_weight < 0:
         raise ValueError(
-            "cc_weight deve essere >= 0."
+            "cc_weight must be >= 0."
         )
 
     if kld_weight < 0:
         raise ValueError(
-            "kld_weight deve essere >= 0."
+            "kld_weight must be >= 0."
         )
 
     loss_cc = cc_loss(

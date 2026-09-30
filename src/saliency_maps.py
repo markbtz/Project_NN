@@ -1,5 +1,5 @@
 """
-Utility condivise per la normalizzazione delle saliency map.
+Shared utilities for saliency-map normalization.
 """
 
 import torch
@@ -10,12 +10,12 @@ def normalize_probability_map(
     eps: float = 1e-6,
 ) -> torch.Tensor:
     """
-    Normalizza gli ultimi due assi spaziali affinché
-    ogni mappa abbia somma uguale a 1.
+    Normalize the last two spatial dimensions so that
+    each map sums to 1.
     """
     if eps <= 0:
         raise ValueError(
-            "eps deve essere > 0."
+            "eps must be > 0."
         )
     
     saliency_map = torch.clamp(

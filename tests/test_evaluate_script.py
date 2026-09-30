@@ -343,7 +343,7 @@ def test_m1_l_rejects_wrong_loss_or_target(
         checkpoint_path,
     )
 
-    with pytest.raises(ValueError, match="M1-L richiede"):
+    with pytest.raises(ValueError, match="M1-L requires"):
         evaluate_script.load_model_for_evaluation(
             experiment="M1-L",
             experiment_config={

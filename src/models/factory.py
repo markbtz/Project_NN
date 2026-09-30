@@ -1,5 +1,5 @@
 """
-Factory condivisa per la costruzione dei modelli.
+Shared factory for model construction.
 """
 
 from src.models.adaptive_center_prior import AdaptiveCenterPriorG
@@ -20,7 +20,7 @@ def build_model(
     pretrained: bool,
 ):
     """
-    Costruisce il modello associato all'esperimento richiesto.
+    Build the model associated with the requested experiment.
     """
 
     if experiment == "B0":
@@ -79,5 +79,5 @@ def build_model(
         )
 
     raise ValueError(
-        f"Esperimento non supportato dalla model factory: {experiment}"
+        f"Experiment not supported by the model factory: {experiment}"
     )

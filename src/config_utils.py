@@ -1,7 +1,7 @@
 """
-Utility condivise per il caricamento delle configurazioni.
+Shared utilities for loading configuration files.
 
-Questo modulo evita di duplicare la stessa logica in:
+This module avoids duplicating the same logic in:
 - scripts/train.py
 - scripts/evaluate.py
 """
@@ -16,8 +16,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 def load_yaml_config(path):
     """
-    Carica un file YAML e verifica che il contenuto
-    principale sia un mapping/dizionario.
+    Load a YAML files and validate its contents
+    top-level object is a mapping/dictionary.
     """
 
     path = Path(path)
@@ -30,7 +30,7 @@ def load_yaml_config(path):
 
     if not isinstance(config, dict):
         raise ValueError(
-            f"Configurazione YAML non valida: {path}"
+            f"Invalid YAML configuration: {path}"
         )
 
     return config
@@ -38,10 +38,10 @@ def load_yaml_config(path):
 
 def resolve_project_path(path):
     """
-    Converte un path relativo in un path assoluto
-    rispetto alla root del repository.
+    Convert a relative path to an absolute path
+    relative to the repository root.
 
-    I path già assoluti vengono restituiti senza modifiche.
+    Absolute paths are returned unchanged.
     """
 
     path = Path(path)

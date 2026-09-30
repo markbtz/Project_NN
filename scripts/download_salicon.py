@@ -1,16 +1,16 @@
 """
-Scarica ed estrae il dataset SALICON da Kaggle.
+Download and extract the SALICON dataset from Kaggle.
 
-Prerequisiti:
-    - pacchetto `kaggle` installato (già in environment-mac.yml / requirements-colab.txt)
+Prerequisites:
+    - `kaggle` package installed (already listed in environment-mac.yml / requirements-colab.txt)
     - ~/.kaggle/kaggle.json con le proprie credenziali (vedi README.md)
 
-Uso:
+Use:
     python scripts/download_salicon.py --output_dir data/
 
-Nota: il nome esatto del dataset Kaggle indicato nella traccia è
-"roshan401/salicon" (vedi slide del progetto). Se il link non fosse più
-valido, cercare "SALICON" su kaggle.com/datasets e aggiornare KAGGLE_DATASET.
+Note: the exact Kaggle dataset name specified in the assignment is
+"roshan401/salicon" (see the project slides). If the link is no longer
+valid, search "SALICON" on kaggle.com/datasets and upload KAGGLE_DATASET.
 """
 import argparse
 import os
@@ -24,20 +24,20 @@ KAGGLE_DATASET = "roshan401/salicon"
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--output_dir", type=str, default="data",
-                         help="Cartella in cui scaricare ed estrarre il dataset")
+                         help="Directory where the dataset is downloaded and extracted")
     parser.add_argument("--dataset", type=str, default=KAGGLE_DATASET,
-                         help="Slug del dataset Kaggle (owner/dataset-name)")
+                         help="Kaggle dataset slug (owner/dataset-name)")
     args = parser.parse_args()
 
     os.makedirs(args.output_dir, exist_ok=True)
 
     kaggle_json = os.path.expanduser("~/.kaggle/kaggle.json")
     if not os.path.exists(kaggle_json):
-        print(f"ERRORE: non trovo {kaggle_json}.")
-        print("Segui le istruzioni nel README ('Setup Kaggle API') prima di rilanciare.")
+        print(f"ERROR: cannot find {kaggle_json}.")
+        print("Follow the README instructions ('Setup Kaggle API') before rerunning.")
         sys.exit(1)
 
-    print(f"Scarico '{args.dataset}' in '{args.output_dir}' ...")
+    print(f"Downloading '{args.dataset}' in '{args.output_dir}' ...")
     cmd = [
         "kaggle", "datasets", "download",
         "-d", args.dataset,
@@ -46,10 +46,10 @@ def main():
     ]
     result = subprocess.run(cmd)
     if result.returncode != 0:
-        print("Download fallito. Controlla lo slug del dataset e le credenziali Kaggle.")
+        print("Download failed. Check the dataset slug and Kaggle credentials.")
         sys.exit(result.returncode)
 
-    print("\nDownload completato. Contenuto della cartella:")
+    print("\nDownload complete. Directory contents:")
     for root, dirs, files in os.walk(args.output_dir):
         depth = root.replace(args.output_dir, "").count(os.sep)
         indent = "  " * depth
@@ -58,9 +58,9 @@ def main():
             for f in files[:10]:
                 print(f"{indent}  {f}")
             if len(files) > 10:
-                print(f"{indent}  ... e altri {len(files) - 10} file")
+                print(f"{indent}  ... and {len(files) - 10} files")
 
-    print("\nProssimo passo: python scripts/audit_dataset.py --data_dir", args.output_dir)
+    print("\nNext step: python scripts/audit_dataset.py --data_dir", args.output_dir)
 
 
 if __name__ == "__main__":

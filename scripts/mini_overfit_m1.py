@@ -44,7 +44,7 @@ def main():
         augmentation=False,
     )
 
-    # Usiamo sempre le stesse 16 immagini.
+    # Always use the same 16 images.
     subset = Subset(
         dataset,
         list(range(N_IMAGES)),
@@ -116,15 +116,15 @@ def main():
             )
 
     print("-" * 60)
-    print(f"MSE iniziale: {first_loss:.6f}")
-    print(f"MSE finale:   {last_loss:.6f}")
+    print(f"Initial MSE: {first_loss:.6f}")
+    print(f"Final MSE:   {last_loss:.6f}")
 
     if last_loss < first_loss:
-        print("MINI OVERFIT M1: OK - la loss e' diminuita")
+        print("M1 MINI OVERFIT: PASS - loss decreased")
     else:
         raise RuntimeError(
             "MINI OVERFIT M1 FALLITO: "
-            "la loss non e' diminuita."
+            "the loss did not decrease."
         )
 
 

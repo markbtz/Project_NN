@@ -1,9 +1,9 @@
 """
-Diagnostica il comportamento del gate di G: distribuzione di alpha sulle
-immagini di tuning. Se alpha e' quasi costante, il gate non sta imparando
-un peso adattivo per-immagine (gate collapse) — sta solo aggiungendo una
-piccola quantita' fissa di center prior a ogni predizione, il che spiega
-un peggioramento uniforme rispetto a M1-L da solo.
+Diagnose G gate behavior: alpha distribution over
+tuning images. If alpha is nearly constant, the gate is not learning
+an adaptive per-image weight (gate collapse); it is only adding a
+small fixed amount of center prior to every prediction, which explains
+a consistent degradation relative to M1-L alone.
 
 Uso:
     python scripts/diagnose_gate.py \
@@ -34,14 +34,14 @@ def main():
     parser.add_argument("--width", type=int, default=256)
     parser.add_argument("--batch_size", type=int, default=16)
     parser.add_argument("--n_batches", type=int, default=None,
-                         help="Limita il numero di batch per un check veloce")
+                         help="Limit the number of batches for a quick check")
     args = parser.parse_args()
 
     device = get_device()
 
     ckpt = torch.load(args.checkpoint, map_location=device)
     if ckpt.get("experiment") != "G":
-        raise ValueError(f"Checkpoint non e' di G: experiment={ckpt.get('experiment')}")
+        raise ValueError(f"Checkpoint is not for G: experiment={ckpt.get('experiment')}")
 
     model = AdaptiveCenterPriorG(height=args.height, width=args.width)
     model.load_state_dict(ckpt["model_state"])
@@ -68,23 +68,23 @@ def main():
 
     alphas = torch.cat(all_alphas)
 
-    print(f"Campioni analizzati: {alphas.numel()}")
-    print(f"alpha - media: {alphas.mean().item():.6f}")
-    print(f"alpha - deviazione standard: {alphas.std().item():.6f}")
+    print(f"Samples analyzed: {alphas.numel()}")
+    print(f"alpha - mean: {alphas.mean().item():.6f}")
+    print(f"alpha - standard deviation: {alphas.std().item():.6f}")
     print(f"alpha - min: {alphas.min().item():.6f}")
     print(f"alpha - max: {alphas.max().item():.6f}")
-    print(f"alpha - percentili [5,25,50,75,95]: "
+    print(f"alpha - percentiles [5,25,50,75,95]: "
           f"{torch.quantile(alphas, torch.tensor([0.05,0.25,0.5,0.75,0.95])).tolist()}")
 
     print()
     if alphas.std().item() < 0.01:
-        print("DIAGNOSI: alpha e' praticamente costante su tutte le immagini.")
-        print("Il gate NON sta imparando un peso adattivo per-immagine — e' collassato")
-        print("a un valore fisso. Questo spiega un peggioramento uniforme rispetto a M1-L.")
+        print("DIAGNOSIS: alpha is nearly constant across all images.")
+        print("The gate is NOT learning an image-adaptive weight; it has collapsed")
+        print("to a fixed value. This explains a consistent degradation relative to M1-L.")
     else:
-        print("alpha varia in modo non trascurabile tra le immagini — nessun collasso")
-        print("evidente. Il peggioramento (se confermato) ha probabilmente un'altra causa")
-        print("(es. il gate si affida al prior proprio nei casi in cui M1-L era gia' forte).")
+        print("alpha varies meaningfully across images; no obvious collapse")
+        print("is visible. If the degradation is confirmed, it likely has another cause")
+        print("(e.g. the gate relies on the prior when M1-L is already strong).")
 
 
 if __name__ == "__main__":

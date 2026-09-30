@@ -130,7 +130,7 @@ def test_alignment_rejects_missing_image_ids(
 
     with pytest.raises(
         ValueError,
-        match="non contengono gli stessi image_id",
+        match="do not contain the same image_id values",
     ):
         align_by_image_id(
             left_samples,

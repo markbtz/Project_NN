@@ -110,27 +110,27 @@ def test_g_freezes_base_and_keeps_it_in_eval():
 
     model.freeze_base_and_prior()
 
-    # Simula quello che fara' train.py
+    # Simulate what train.py will do
     model.train()
 
     assert model.training
 
-    # La base deve restare in eval.
+    # The base model must remain in eval mode.
     assert not model.base_model.training
 
-    # Anche il prior resta in eval.
+    # The prior must also remain in eval mode.
     assert not model.center_prior.training
 
-    # Il gate invece deve essere in training.
+    # The gate must remain in training mode.
     assert model.gate.training
 
-    # Nessun parametro M1-L deve essere allenabile.
+    # No M1-L parameter should be trainable.
     assert all(
         not parameter.requires_grad
         for parameter in model.base_model.parameters()
     )
 
-    # I parametri del gate devono essere allenabili.
+    # Gate parameters must be trainable.
     assert all(
         parameter.requires_grad
         for parameter in model.gate.parameters()

@@ -1,5 +1,5 @@
 """
-Utility condivise per il monitoraggio del training.
+Shared utilities for training monitoring.
 """
 import csv
 import os
@@ -7,10 +7,10 @@ import tempfile
 
 class EarlyStopping:
     """
-    Tiene traccia delle epoche consecutive senza miglioramento.
+    Track consecutive epochs without improvement.
 
-    La decisione su cosa significhi "miglioramento" resta esterna:
-    il training usa la stessa logica del best checkpoint.
+    The definition of "improvement" remains external:
+    training uses the same logic as best-checkpoint selection.
     """
 
     def __init__(
@@ -20,7 +20,7 @@ class EarlyStopping:
     ):
         if patience < 1:
             raise ValueError(
-                "early stopping patience deve essere >= 1."
+                "early stopping patience must be >= 1."
             )
 
         self.enabled = enabled
@@ -32,9 +32,9 @@ class EarlyStopping:
         improved: bool,
     ) -> bool:
         """
-        Aggiorna il contatore.
+        Update the counter.
 
-        Ritorna True quando il training deve fermarsi.
+        Return True when training should stop.
         """
 
         if improved:
@@ -50,7 +50,7 @@ class EarlyStopping:
 
 class TrainingHistory:
     """
-    Memorizza le statistiche del training epoca per epoca.
+    Store training statistics epoch by epoch.
     """
 
     def __init__(self):
@@ -80,15 +80,15 @@ class TrainingHistory:
         path,
     ):
         """
-        Salva la training history in formato CSV.
+        Save training history as CSV.
 
-        Scrittura atomica: si scrive prima su un file temporaneo nella
-        stessa directory, poi si sostituisce il file finale con
-        os.replace(). Questo evita che una disconnessione Colab a meta'
-        scrittura lasci un CSV troncato/corrotto — scenario concreto,
-        non solo teorico, dato che la history vive sullo stesso
-        checkpoint_dir su Drive dei checkpoint, esposto alle stesse
-        interruzioni di sessione.
+        Atomic write: first write to a temporary file in the
+        same directory, then replace the final file with
+        os.replace(). This prevents a Colab disconnection during
+        the write from leaving a truncated/corrupted CSV—a realistic
+        scenario because the history is stored in the same
+        Drive checkpoint_dir as the checkpoints and is exposed to the same
+        session interruptions.
         """
 
         directory = os.path.dirname(path)
@@ -141,7 +141,7 @@ class TrainingHistory:
         path,
     ):
 
-        """ Carica una training history esistente, se presente.  """
+        """ Load an existing training history, if present.  """
 
         if not os.path.exists(path):
             return
@@ -175,7 +175,7 @@ class TrainingHistory:
         self,
         path,
     ):
-        """ Salva il grafico train loss / validation loss.  """
+        """ Save the train-loss / validation-loss plot.  """
 
         if not self.records:
             return
@@ -238,7 +238,7 @@ class TrainingHistory:
         self,
         selection_mode: str,
     ) -> int:
-        """   Conta le epoche consecutive senza miglioramento alla fine della training history.
+        """   Count consecutive epochs without improvement at the end of the training history.
         """
 
         if not self.records:
@@ -249,7 +249,7 @@ class TrainingHistory:
             "min",
         ):
             raise ValueError(
-                "selection_mode deve essere 'max' oppure 'min'."
+                "selection_mode must be 'max' or 'min'."
             )
 
         best_score = None

@@ -6,7 +6,7 @@ from torch import nn
 from torch.utils.data import DataLoader, Dataset
 
 
-# Permette di importare src quando eseguiamo pytest
+# Allow importing src when running pytest
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
@@ -16,7 +16,7 @@ from src.metrics import cc, sim, kld
 
 class DictSaliencyDataset(Dataset):
     """
-    Dataset minimale per testare l'evaluator senza SALICON reale.
+    Minimal dataset for testing the evaluator without real SALICON data.
     """
 
     def __init__(
@@ -47,7 +47,7 @@ class DictSaliencyDataset(Dataset):
 
 class IdentityModel(nn.Module):
     """
-    Usa direttamente batch['image'] come prediction.
+    Use batch['image'] directly as the prediction.
     """
 
     def forward(self, x):
@@ -56,7 +56,7 @@ class IdentityModel(nn.Module):
 
 class StateTrackingModel(nn.Module):
     """
-    Registra se il forward e' stato eseguito in eval
+    Record whether forward was executed in eval mode
     e dentro torch.inference_mode().
     """
 
@@ -75,8 +75,8 @@ class StateTrackingModel(nn.Module):
 
 class DummyB0(nn.Module):
     """
-    Modello con la stessa idea di interfaccia di CenterPriorB0:
-    forward riceve la batch size, non le immagini.
+    Model with the same interface pattern as CenterPriorB0:
+    forward receives the batch size, not the images.
     """
 
     def __init__(self, center_map):
@@ -219,7 +219,7 @@ def test_aggregation_is_correct_with_uneven_batch_sizes():
         metric_targets=target,
     )
 
-    # 5 campioni -> batch 2 + 2 + 1
+    # 5 samples -> batches of 2 + 2 + 1
     loader = DataLoader(
         dataset,
         batch_size=2,
@@ -389,13 +389,13 @@ def test_model_state_is_restored_after_evaluation():
         torch.device("cpu"),
     )
 
-    # Durante evaluation il modello deve essere in eval().
+    # The model must be in eval() mode during evaluation.
     assert model.forward_training_state is False
 
-    # Il forward deve avvenire dentro inference_mode().
+    # Forward must run inside inference_mode().
     assert model.inference_mode_enabled is True
 
-    # Al termine deve tornare allo stato originale.
+    # Restore the original mode afterward.
     assert model.training is True
 
 
@@ -411,7 +411,7 @@ def test_validation_loss_is_weighted_by_number_of_samples():
         dtype=torch.float32,
     )
 
-    # Target metriche non costante, per evitare casi degeneri di CC.
+    # Use a non-constant metric target to avoid degenerate CC cases.
     metric_target = torch.tensor(
         [[[[0.1, 0.2], [0.3, 0.4]]]],
         dtype=torch.float32,

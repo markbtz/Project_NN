@@ -11,7 +11,7 @@ class PVTv2B1Encoder(nn.Module):
     Encoder Transformer gerarchico per M2.
 
     Usa PVTv2-B1 tramite timm e restituisce tre feature map
-    multi-scala compatibili con l'interfaccia C3/C4/C5 usata da M1.
+    multi-scale features compatible with the C3/C4/C5 interface used by M1.
 
     Per input 192x256 ci aspettiamo:
 
@@ -32,12 +32,12 @@ class PVTv2B1Encoder(nn.Module):
         channels = self.backbone.feature_info.channels()
         reductions = self.backbone.feature_info.reduction()
 
-        # PVTv2-B1 deve produrre:
+        # PVTv2-B1 must produce:
         # channels   = [64, 128, 320, 512]
         # reductions = [4, 8, 16, 32]
         if len(channels) < 4:
             raise RuntimeError(
-                f"PVTv2-B1 ha restituito solo {len(channels)} livelli."
+                f"PVTv2-B1 returned only {len(channels)} levels."
             )
 
         self.out_channels = {
@@ -65,17 +65,17 @@ class PVTv2B1Encoder(nn.Module):
 class M2HierarchicalTransformer(nn.Module):
     """
     M2:
-    PVTv2-B1 + decoder multi-scala di M1.
+    PVTv2-B1 + decoder multi-scala of M1.
 
-    Rispetto a M1-L:
-    - cambia l'encoder: ResNet18 -> PVTv2-B1
-    - mantiene lo stesso schema multi-scala C3/C4/C5
-    - mantiene MultiScaleDecoder con width=96
-    - mantiene target density_map_prob
-    - mantiene loss CC+KLD 0.5/0.5
+    Compared to M1-L:
+    - changes the encoder: ResNet18 -> PVTv2-B1
+    - keeps the same C3/C4/C5 multi-scale scheme
+    - keeps the MultiScaleDecoder with width=96
+    - keeps the density_map_prob target
+    - keeps CC+KLD loss at 0.5/0.5
 
-    Obiettivo sperimentale:
-    isolare l'effetto del cambio di encoder.
+    Experimental objective:
+    isolate the effect of changing the encoder.
     """
 
     def __init__(

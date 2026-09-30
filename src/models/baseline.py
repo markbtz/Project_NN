@@ -1,13 +1,13 @@
 """
-Modelli B0 (Center Prior) e B1 (ResNet18 + decoder singolo, senza skip).
+B0 (Center Prior) and B1 (ResNet18 + single decoder, no skip connections).
 Vedi configs/experiments.yaml per la definizione del disegno sperimentale.
 
-B1 usa SOLO la feature finale dell'encoder (C5, stride 32): niente skip
-connections qui — quelle arrivano con M1 (di competenza di C). Tenere questo
-file "semplice" e' intenzionale: e' il confronto pulito rispetto a cui M1
-deve dimostrare un miglioramento.
+B1 uses ONLY the encoder final feature (C5, stride 32): no skip
+connections here; those are introduced in M1. Keeping this
+file simple is intentional: it provides the clean baseline against which M1
+must demonstrate an improvement.
 
-Smoke test locale (funziona anche senza dataset reale):
+Local smoke test (works without the real dataset):
     python src/models/baseline.py
 """
 
@@ -37,28 +37,28 @@ class CenterPriorB0(nn.Module):
     """
     B0 — center prior: nessun training via backprop.
 
-    La mappa e' la media delle density_map_prob del training set, cioe'
-    density map gia' normalizzate come distribuzioni di probabilita' con
+    The map is the mean of training-set density_map_prob maps, i.e.
+    density maps already normalized as probability distributions with
     somma spaziale circa uguale a 1.
 
     Qui il prior viene inizializzato come distribuzione uniforme.
-    Usare fit() o fit_from_loader() per calcolarlo sui dati reali SALICON.
+    Use fit() or fit_from_loader() to compute it on real SALICON data.
     """
 
     def __init__(self, height: int, width: int):
         super().__init__()
         self.height = height
         self.width = width
-        # buffer, non parametro: non si allena via backprop
+        # Buffer, not a parameter: not trained by backpropagation.
         self.register_buffer("center_map", torch.ones(1, 1, height, width) / (height * width))
 
     @torch.no_grad()
     def fit(self, density_maps: torch.Tensor, eps: float = 1e-6):
         """
-        density_maps: (N, 1, H, W) density_map_prob del training set, GIA'
-        interamente in memoria. Va bene per pochi campioni (es. smoke test);
-        per il dataset reale (10.000 immagini, ~1.9 GB solo per questo
-        tensore) usare fit_from_loader() per non rischiare OOM su Colab
+        density_maps: (N, 1, H, W) training-set density_map_prob, ALREADY
+        interamente in memoria. Va bene per pochi samples (es. smoke test);
+        for the real dataset (10,000 images, ~1.9 GB for this tensor alone),
+        use fit_from_loader() to avoid OOM on Colab.
         free o M1 Max.
         """
         mean_map = density_maps.mean(dim=0, keepdim=True)
@@ -96,9 +96,9 @@ class CenterPriorB0(nn.Module):
 
 class ResNet18Encoder(nn.Module):
     """
-    Estrae C2/C3/C4/C5. B1 usa solo C5, ma le altre feature restano
-    disponibili come attributi cosi' M1 (skip connections, di competenza di C)
-    puo' riusare lo stesso encoder senza riscriverlo.
+    Extract C2/C3/C4/C5. B1 uses only C5, but the other features remain
+    available as attributes so M1 (skip connections)
+    can reuse the same encoder without rewriting it.
     """
     def __init__(self, pretrained: bool = True):
         super().__init__()
@@ -106,7 +106,7 @@ class ResNet18Encoder(nn.Module):
             weights = torchvision.models.ResNet18_Weights.DEFAULT if pretrained else None
             backbone = torchvision.models.resnet18(weights=weights)
         except AttributeError:
-            # API vecchia di torchvision
+            # Legacy torchvision API.
             backbone = torchvision.models.resnet18(pretrained=pretrained)
 
         self.stem = nn.Sequential(backbone.conv1, backbone.bn1, backbone.relu, backbone.maxpool)
@@ -127,7 +127,7 @@ class ResNet18Encoder(nn.Module):
 
 class SingleBottleneckDecoder(nn.Module):
     """
-    Decoder di B1: SOLO C5 in ingresso, 5 blocchi di upsampling bilineare x2
+    B1 decoder: ONLY C5 as input, five 2x bilinear upsampling blocks.
     + conv per tornare da stride 32 alla risoluzione di input (5 blocchi = x32).
     Nessuna skip connection: e' la differenza esplicita rispetto a M1.
     """
@@ -149,7 +149,7 @@ class SingleBottleneckDecoder(nn.Module):
         for block in self.blocks:
             x = block(x)
         x = self.head(x)
-        # resize di sicurezza se lo stride non divide esattamente H/W
+        # Safety resize when stride does not divide H/W exactly.
         if tuple(x.shape[-2:]) != tuple(output_size):
             x = F.interpolate(x, size=output_size, mode="bilinear", align_corners=False)
         return x
@@ -157,15 +157,15 @@ class SingleBottleneckDecoder(nn.Module):
 
 class B1Baseline(nn.Module):
     """
-    B1 completo: ResNet18Encoder (solo C5) + SingleBottleneckDecoder.
+    Complete B1: ResNet18Encoder (C5 only) + SingleBottleneckDecoder.
     Loss di riferimento: MSE (vedi configs/experiments.yaml), calcolata in
     train.py direttamente contro density_map_raw del dataset.
 
-    forward() restituisce una mappa "grezza" (0-1 per pixel, via sigmoid),
-    NON normalizzata a somma 1 — la MSE di training va calcolata su questa,
-    confrontandola con density_map_raw (stessa scala). Usare
-    predict_probability() (o to_probability_map() direttamente) solo in
-    fase di valutazione, per CC/SIM/KLD, confrontandola con density_map_prob.
+    forward() returns a raw map (0-1 per pixel via sigmoid),
+    NOT normalized to sum to 1; training MSE is computed on this output,
+    against density_map_raw (same scale). Use
+    predict_probability() (or to_probability_map() directly) only during
+    evaluation for CC/SIM/KLD, against density_map_prob.
     """
     def __init__(self, pretrained: bool = True, decoder_width: int = 96):
         super().__init__()
@@ -177,16 +177,16 @@ class B1Baseline(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         feats = self.encoder(x)
         logits = self.decoder(feats["C5"], output_size=tuple(x.shape[-2:]))
-        return torch.sigmoid(logits)  # mappa grezza, 0-1 per pixel
+        return torch.sigmoid(logits)  # Raw map, pixel values in [0, 1].
 
     def predict_probability(self, x: torch.Tensor, eps: float = 1e-6) -> torch.Tensor:
-        """Solo per valutazione: converte l'output grezzo in probabilita' (somma 1)."""
+        """Evaluation only: convert raw output to a probability map (sum = 1)."""
         return to_probability_map(self.forward(x), eps=eps)
 
 
 if __name__ == "__main__":
-    # Smoke test locale: verifica solo che shape e normalizzazione siano corrette.
-    # Non richiede il dataset reale.
+    # Local smoke test for shape and normalization only.
+    # Does not require the real dataset.
     device = get_device()
     print(f"Device: {device}")
 
@@ -195,13 +195,13 @@ if __name__ == "__main__":
 
     model = B1Baseline(pretrained=True).to(device)
     raw_output = model(dummy_input)
-    print(f"B1 output grezzo shape: {tuple(raw_output.shape)} (atteso: ({batch_size}, 1, {height}, {width}))")
-    print(f"B1 range valori grezzi (min/max, atteso in [0,1]): "
+    print(f"B1 raw output shape: {tuple(raw_output.shape)} (expected: ({batch_size}, 1, {height}, {width}))")
+    print(f"B1 raw value range (min/max, expected in [0,1]): "
           f"{raw_output.min().item():.4f} / {raw_output.max().item():.4f}")
 
     prob_output = model.predict_probability(dummy_input)
     sums = prob_output.sum(dim=(-2, -1)).flatten().tolist()
-    print(f"B1 probabilita' — somma per immagine (deve essere ~1): {[round(s, 6) for s in sums]}")
+    print(f"B1 probabilities - per-image sum (expected ~1): {[round(s, 6) for s in sums]}")
 
     b0 = CenterPriorB0(height=height, width=width).to(device)
     dummy_density_raw = torch.rand(10, 1, height, width, device=device)
@@ -209,9 +209,9 @@ if __name__ == "__main__":
     b0.fit(dummy_density_prob)
     center_out = b0(batch_size)
     print(f"B0 output shape: {tuple(center_out.shape)}")
-    print(f"B0 somma (deve essere ~1): {center_out[0].sum().item():.6f}")
+    print(f"B0 sum (expected ~1): {center_out[0].sum().item():.6f}")
 
-    # Smoke test aggiuntivo per fit_from_loader (nuova funzionalita')
+    # Additional smoke test for fit_from_loader.
     b0_loader = CenterPriorB0(height=height, width=width).to(device)
 
     def dummy_batches():
@@ -221,4 +221,4 @@ if __name__ == "__main__":
 
     b0_loader.fit_from_loader(dummy_batches())
     center_out_loader = b0_loader(batch_size)
-    print(f"B0 (fit_from_loader) somma (deve essere ~1): {center_out_loader[0].sum().item():.6f}")
+    print(f"B0 (fit_from_loader) sum (expected ~1): {center_out_loader[0].sum().item():.6f}")

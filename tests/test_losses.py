@@ -333,9 +333,9 @@ def test_losses_reject_shape_mismatch():
 
 def test_cc_loss_matches_one_minus_cc_metric():
     """
-    CC-loss e metrica CC devono seguire la stessa convenzione:
+    CC loss and the CC metric must follow the same convention:
         CC-loss ~= 1 - CC
-    usando lo stesso epsilon.
+    using the same epsilon.
     """
 
     eps = 1e-6
@@ -374,9 +374,9 @@ def test_cc_loss_matches_one_minus_cc_metric():
 
 def test_kld_loss_matches_kld_metric():
     """
-    KLD loss e metrica KLD devono seguire la stessa convenzione:
+    KLD loss and the KLD metric must follow the same convention:
         KLD(target || prediction)
-    usando lo stesso epsilon.
+    using the same epsilon.
     """
 
     eps = 1e-6

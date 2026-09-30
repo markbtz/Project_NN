@@ -1,7 +1,5 @@
 """
-Genera la figura qualitativa sul tuning set.
-
-Logica derivata dalle celle 7.6.1–7.6.4 del notebook VER_FINALE.
+Generates the qualitative figure on the tuning set. 
 """
 
 import argparse
@@ -59,7 +57,7 @@ def select_examples(results_dir):
         for row in b1_m1 + m1_m1l + m1l_g
         for values in row[1:]
     ):
-        raise ValueError("Sono presenti valori CC non finiti.")
+        raise ValueError("Non-finite CC values are present.")
 
     rankings = [
         ("G migliore per CC", sorted(m1l_g, key=lambda r: (-r[2]["cc"], r[0]))),
@@ -84,7 +82,7 @@ def select_examples(results_dir):
         choice = next((row for row in candidates if row[0] not in used), None)
 
         if choice is None:
-            raise ValueError("Non ci sono abbastanza image_id distinti.")
+            raise ValueError("There are not enough distinct image_id values.")
 
         selected.append({"label": label, "image_id": choice[0]})
         used.add(choice[0])
@@ -112,7 +110,7 @@ def prepare_dataset(data_dir, selected):
     wanted = {item["image_id"] for item in selected}
     indices = {}
 
-    # Stesso metodo usato nella versione testata del notebook.
+    # Same method used in the tested notebook version.
     for index in range(len(dataset)):
         image_id = dataset[index]["image_id"]
         if image_id in wanted:
@@ -123,7 +121,7 @@ def prepare_dataset(data_dir, selected):
     missing = wanted - set(indices)
     if missing:
         raise ValueError(
-            f"Image ID selezionati non trovati nel tuning set: {sorted(missing)}"
+            f"Selected image IDs not found in the tuning set: {sorted(missing)}"
         )
 
     return dataset, indices, width, height, eps
@@ -138,7 +136,7 @@ def load_models(checkpoint_dir, experiments_config, device, width, height):
 
         if not checkpoint.is_file():
             raise FileNotFoundError(
-                f"Checkpoint {experiment} non trovato: {checkpoint}"
+                f"Checkpoint {experiment} not found: {checkpoint}"
             )
 
         model, prediction_fn, _, _, _ = load_model_for_evaluation(
@@ -239,7 +237,7 @@ def save_figure(results, output):
     output = Path(output)
     output.parent.mkdir(parents=True, exist_ok=True)
 
-    titles = ["Immagine", "Ground truth", "B0", "B1", "M1", "M1-L", "G", "M2"]
+    titles = ["Image", "Ground truth", "B0", "B1", "M1", "M1-L", "G", "M2"]
 
     fig, axes = plt.subplots(
         len(results),
@@ -293,12 +291,12 @@ def save_figure(results, output):
             if row_index == 0:
                 axis.set_title(title, fontsize=11)
 
-    fig.suptitle("Confronto qualitativo sul tuning set", fontsize=14)
+    fig.suptitle("Qualitative comparison on the tuning set", fontsize=14)
     plt.tight_layout(rect=[0.08, 0.0, 1.0, 0.97])
     fig.savefig(output, dpi=200, bbox_inches="tight")
     plt.close(fig)
 
-    print(f"Figura salvata in: {output}")
+    print(f"Figure saved to: {output}")
 
 
 def main():
@@ -311,7 +309,7 @@ def main():
 
     selected = select_examples(args.results_dir)
 
-    print("Esempi selezionati:")
+    print("Selected examples:")
     for item in selected:
         print(f"- {item['label']}: {item['image_id']}")
 

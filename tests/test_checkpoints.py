@@ -40,7 +40,7 @@ def test_save_and_load_training_checkpoint(tmp_path):
         lr=1e-4,
     )
 
-    # Esegue uno step per creare realmente lo stato dell'optimizer.
+    # Run one step to initialize the optimizer state.
     inputs = torch.tensor(
         [[1.0, 2.0]]
     )

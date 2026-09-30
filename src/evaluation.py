@@ -5,24 +5,24 @@ from src.metrics import cc, sim, kld
 
 def _get_batch_size(batch) -> int:
     """
-    Ricava la batch size dal tensore delle immagini.
+    Infer batch size from the image tensor.
     """
 
     if "image" not in batch:
         raise KeyError(
-            "Il batch deve contenere la chiave 'image'."
+            "Batch must contain the 'image' key."
         )
 
     images = batch["image"]
 
     if not torch.is_tensor(images):
         raise TypeError(
-            "batch['image'] deve essere un torch.Tensor."
+            "batch['image'] must be a torch.Tensor."
         )
 
     if images.ndim == 0:
         raise ValueError(
-            "batch['image'] deve avere una dimensione di batch."
+            "batch['image'] must include a batch dimension."
         )
 
     return int(images.shape[0])
@@ -30,14 +30,14 @@ def _get_batch_size(batch) -> int:
 
 def _get_image_ids(batch, batch_size: int):
     """
-    Restituisce gli image_id come lista di stringhe.
-    Viene usato solo quando collect_per_sample=True.
+    Return image_id values as a list of strings.
+    Used only when collect_per_sample=True.
     """
 
     if "image_id" not in batch:
         raise KeyError(
-            "collect_per_sample=True richiede la chiave "
-            "'image_id' nel batch."
+            "collect_per_sample=True requires the key "
+            "'image_id' in the batch."
         )
 
     image_ids = batch["image_id"]
@@ -56,7 +56,7 @@ def _get_image_ids(batch, batch_size: int):
 
     if len(image_ids) != batch_size:
         raise ValueError(
-            "Il numero di image_id non coincide con la batch size: "
+            "The number of image_id values does not match the batch size: "
             f"{len(image_ids)} != {batch_size}."
         )
 
@@ -77,60 +77,60 @@ def evaluate_model(
     collect_per_sample=False,
 ):
     """
-    Valuta un modello su un DataLoader usando CC, SIM e KLD.
+    Evaluate a model on a DataLoader using CC, SIM, and KLD.
 
     Parameters
     ----------
     model
-        Modello PyTorch da valutare.
+        PyTorch model to evaluate.
 
     data_loader
-        DataLoader che restituisce batch in forma di dizionario.
+        DataLoader returning dictionary batches.
 
     device
-        Device su cui eseguire la valutazione.
+        Device used for evaluation.
 
     prediction_fn
-        Funzione opzionale con firma:
+        Optional function with signature:
 
             prediction_fn(model, batch, device)
 
-        Se None, viene usato:
+        If None, use:
 
             model(batch["image"].to(device))
 
-        Serve, per esempio, per B0, che produce una prediction
-        a partire dalla sola batch size.
+        Useful for B0, which produces a prediction
+        using only the batch size.
 
     metric_prediction_fn
-        Funzione opzionale con firma:
+        Optional function with signature:
 
             metric_prediction_fn(model, batch, device)
 
-        Se specificata, il suo output viene usato esclusivamente
-        per CC/SIM/KLD. La prediction originale continua invece
-        a essere usata per la loss.
+        If provided, its output is used only
+        for CC/SIM/KLD. The original prediction is still
+        used for the loss.
 
-        Questo permette, per esempio, di mantenere la MSE sulla
-        prediction raw di B1/M1 e valutare contemporaneamente
+        This allows, for example, keeping MSE on the
+        raw B1/M1 prediction while evaluating
         CC/SIM/KLD sulla probability map.
 
     loss_fn
-        Loss opzionale. Deve restituire una loss scalare media
-        del batch.
+        Optional loss. Must return a scalar batch-mean loss
+        for the batch.
 
     loss_target_key
-        Chiave del batch da usare come target della loss.
-        Obbligatoria se loss_fn non e' None.
+        Batch key used as the loss target.
+        Required when loss_fn is not None.
 
     metric_target_key
-        Chiave del batch da usare come target per CC/SIM/KLD.
+        Batch key used as the CC/SIM/KLD target.
 
     eps
         Epsilon passato alle metriche.
 
     collect_per_sample
-        Se True, conserva CC/SIM/KLD per ogni image_id.
+        If True, keep CC/SIM/KLD for each image_id.
 
     Returns
     -------
@@ -157,13 +157,13 @@ def evaluate_model(
 
     if eps <= 0:
         raise ValueError(
-            "eps deve essere > 0."
+            "eps must be > 0."
         )
 
     if loss_fn is not None and loss_target_key is None:
         raise ValueError(
-            "loss_target_key e' obbligatoria quando loss_fn "
-            "non e' None."
+            "loss_target_key is required when loss_fn "
+            "is not None."
         )
 
     was_training = model.training
@@ -187,7 +187,7 @@ def evaluate_model(
 
                 if metric_target_key not in batch:
                     raise KeyError(
-                        f"Il batch non contiene metric_target_key="
+                        f"Batch does not contain metric_target_key="
                         f"'{metric_target_key}'."
                     )
 
@@ -204,7 +204,7 @@ def evaluate_model(
 
                 if not torch.is_tensor(prediction):
                     raise TypeError(
-                        "La prediction deve essere un torch.Tensor."
+                        "Prediction must be a torch.Tensor."
                     )
 
                 if metric_prediction_fn is None:
@@ -218,8 +218,8 @@ def evaluate_model(
 
                 if not torch.is_tensor(metric_prediction):
                     raise TypeError(
-                        "La prediction per le metriche deve essere "
-                        "un torch.Tensor."
+                        "Metric prediction must be "
+                        "a torch.Tensor."
                     )
 
                 metric_target = batch[
@@ -249,17 +249,17 @@ def evaluate_model(
 
                 if cc_values.shape != (batch_size,):
                     raise ValueError(
-                        "CC deve restituire un valore per campione."
+                        "CC must return one value per sample."
                     )
 
                 if sim_values.shape != (batch_size,):
                     raise ValueError(
-                        "SIM deve restituire un valore per campione."
+                        "SIM must return one value per sample."
                     )
 
                 if kld_values.shape != (batch_size,):
                     raise ValueError(
-                        "KLD deve restituire un valore per campione."
+                        "KLD must return one value per sample."
                     )
 
                 metric_sums["cc"] += (
@@ -277,7 +277,7 @@ def evaluate_model(
                 if loss_fn is not None:
                     if loss_target_key not in batch:
                         raise KeyError(
-                            f"Il batch non contiene loss_target_key="
+                            f"Batch does not contain loss_target_key="
                             f"'{loss_target_key}'."
                         )
 
@@ -299,8 +299,8 @@ def evaluate_model(
 
                     if batch_loss.ndim != 0:
                         raise ValueError(
-                            "loss_fn deve restituire una loss "
-                            "scalare media del batch."
+                            "loss_fn must return a "
+                            "scalare media for the batch."
                         )
 
                     loss_sum += (
@@ -343,7 +343,7 @@ def evaluate_model(
 
     if n_samples == 0:
         raise ValueError(
-            "Impossibile valutare un DataLoader vuoto."
+            "Cannot evaluate an empty DataLoader."
         )
 
     summary = {

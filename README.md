@@ -86,8 +86,11 @@ tests/
 └── ...                        # Unit and integration tests
 
 results/
-├── split_manifest.csv         # Fixed train/tuning/internal-test split
-└── ...                        # Evaluation and comparison artifacts
+├── split_manifest.csv                 # Fixed train/tuning/internal-test split
+├── statistics_10000.json              # Bootstrap analysis reported in the paper
+├── evaluation_internal_test/          # Final internal-test scores and comparisons
+├── evaluation_probability_fair_all/   # Tuning scores, probability-space evaluation
+└── legacy_pre_fix/                    # Earlier runs, not comparable (history only)
 ```
 
 ## Setup and Requirements
@@ -290,7 +293,7 @@ python scripts/compare_evaluations.py \
     --output <evaluation_dir>/comparisons/M1_minus_B1.csv
 
 python scripts/bootstrap_ci.py <evaluation_dir>/comparisons/M1_minus_B1.csv \
-    --n_resamples 1000 --seed 42 \
+    --n_resamples 10000 --seed 42 \
     --output <evaluation_dir>/comparisons/bootstrap_M1_minus_B1.json
 ```
 
@@ -310,7 +313,14 @@ python scripts/qualitative_figures.py --data_dir data/ \
 
 ## Results
 
-Quantitative results, statistical comparisons, and their discussion are reported in the project report.
+Quantitative results, statistical comparisons, and their discussion are reported in the project report. The underlying artifacts are in `results/`:
+
+- `results/evaluation_internal_test/` — final scores on the held-out internal test set, evaluated once after freezing code and protocol, plus per-image comparisons under `comparisons/`.
+- `results/evaluation_probability_fair_all/` — tuning-set scores for all six models under the common probability-space evaluation.
+- `results/statistics_10000.json` — the analysis reported in the paper (10,000 paired bootstrap resamples, seed 42), including per-model bootstrap standard errors and SHA-256 hashes of the per-image CSVs.
+- `results/legacy_pre_fix/` — earlier runs evaluated with the previous, non probability-space pipeline. Kept as history only: these numbers are **not** comparable with the reported results.
+
+The `bootstrap_*.json` files under `comparisons/` come from an earlier 1,000-resample run. The mean differences are identical to `statistics_10000.json`; only the interval precision differs.
 
 ## References
 

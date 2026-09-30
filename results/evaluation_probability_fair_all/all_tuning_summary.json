@@ -1,0 +1,105 @@
+{
+  "B0": {
+    "experiment": "B0",
+    "split": "tuning",
+    "evaluation_mode": "probability_fair",
+    "checkpoint": "/content/drive/MyDrive/nndl-saliency/checkpoints/B0_center_map.pt",
+    "checkpoint_metadata": {},
+    "eps": 1e-06,
+    "loss": null,
+    "cc": 0.5379408993721009,
+    "sim": 0.5700290425300598,
+    "kld": 0.6289106269836425,
+    "n_samples": 2500
+  },
+  "B1": {
+    "experiment": "B1",
+    "split": "tuning",
+    "evaluation_mode": "probability_fair",
+    "checkpoint": "/content/drive/MyDrive/nndl-saliency/checkpoints_final/B1_best.pt",
+    "checkpoint_metadata": {
+      "epoch": 10,
+      "best_score": 0.8748260978698731,
+      "selection_metric": "cc",
+      "selection_mode": "max"
+    },
+    "eps": 1e-06,
+    "loss": null,
+    "cc": 0.8571810233116149,
+    "sim": 0.7773612141609192,
+    "kld": 0.2041252697944641,
+    "n_samples": 2500
+  },
+  "M1": {
+    "experiment": "M1",
+    "split": "tuning",
+    "evaluation_mode": "probability_fair",
+    "checkpoint": "/content/drive/MyDrive/nndl-saliency/checkpoints_final/M1_best.pt",
+    "checkpoint_metadata": {
+      "epoch": 7,
+      "best_score": 0.8793585638046265,
+      "selection_metric": "cc",
+      "selection_mode": "max"
+    },
+    "eps": 1e-06,
+    "loss": null,
+    "cc": 0.861720481967926,
+    "sim": 0.7787100034713745,
+    "kld": 0.19916628024578095,
+    "n_samples": 2500
+  },
+  "M1-L": {
+    "experiment": "M1-L",
+    "split": "tuning",
+    "evaluation_mode": "probability_fair",
+    "checkpoint": "/content/drive/MyDrive/nndl-saliency/checkpoints_final/M1-L_best.pt",
+    "checkpoint_metadata": {
+      "epoch": 7,
+      "best_score": 0.8817238286972046,
+      "selection_metric": "cc",
+      "selection_mode": "max"
+    },
+    "eps": 1e-06,
+    "loss": null,
+    "cc": 0.8642634674072266,
+    "sim": 0.7793288869857788,
+    "kld": 0.19640998289585113,
+    "n_samples": 2500
+  },
+  "G": {
+    "experiment": "G",
+    "split": "tuning",
+    "evaluation_mode": "probability_fair",
+    "checkpoint": "/content/drive/MyDrive/nndl-saliency/checkpoints_final/G_best.pt",
+    "checkpoint_metadata": {
+      "epoch": 1,
+      "best_score": 0.8642931154251099,
+      "selection_metric": "cc",
+      "selection_mode": "max"
+    },
+    "eps": 1e-06,
+    "loss": null,
+    "cc": 0.8642931154251099,
+    "sim": 0.7793226719856262,
+    "kld": 0.19632306957244874,
+    "n_samples": 2500
+  },
+  "M2": {
+    "experiment": "M2",
+    "split": "tuning",
+    "evaluation_mode": "probability_fair",
+    "checkpoint": "/content/drive/MyDrive/nndl-saliency/checkpoints_final/M2_best.pt",
+    "checkpoint_metadata": {
+      "epoch": 9,
+      "best_score": 0.8968843879699707,
+      "selection_metric": "cc",
+      "selection_mode": "max"
+    },
+    "eps": 1e-06,
+    "loss": null,
+    "cc": 0.8778110252380371,
+    "sim": 0.7888317025184631,
+    "kld": 0.17629357223510742,
+    "n_samples": 2500
+  }
+}

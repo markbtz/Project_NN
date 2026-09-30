@@ -1,0 +1,16 @@
+{
+  "experiment": "G",
+  "split": "internal_test",
+  "checkpoint_path": "/content/drive/MyDrive/nndl-saliency/checkpoints_final/G_best.pt",
+  "checkpoint": {
+    "epoch": 1,
+    "best_score": 0.8642931154251099,
+    "selection_metric": "cc",
+    "selection_mode": "max"
+  },
+  "loss": null,
+  "cc": 0.8662982763290406,
+  "sim": 0.7820756786346436,
+  "kld": 0.19248085103034973,
+  "n_samples": 2500
+}
